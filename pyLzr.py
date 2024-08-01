@@ -14,6 +14,7 @@ start from scratch on GUI (possibly better to restart because might not
 use OpenDMX or OLA - but maybe try OLA with ArtNet adapter?)
 
 """
+import pyaudio
 
 
 
