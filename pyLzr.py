@@ -101,7 +101,7 @@ def draw_sine_wave(amplitude):
 
 ### PYGAME WINDOW
 #CONSTANT VARIABLES
-DAMPEN_AMP = 50
+DAMPEN_AMP = 5
 #running check bool variable
 running = True
 #set initial amplitude 
