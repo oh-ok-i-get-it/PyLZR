@@ -1,13 +1,21 @@
 """
 Main file for PyLZR-
 
-probably first going to start with building a audio spectrum analyzer 
-to read microphone input, then send MIDI signal to virtual MIDI device
+probably first going to start with building a audio spectrum analyzer/visualizer 
+to read microphone input 
+  then send MIDI signal to virtual MIDI device?
+OR
+  integrate virtual MIDI device to send MIDI signals based on audio visualizer
+  values (effectively sound reactive mode)?
 which will be connected to SoundSwitch until I can build or find a 
 good DMX protocol API
-
+ 
 AudioVisualizer -> virtual MIDI device/keyboard -> SoundSwitch -> DMX adapter -> laser
-
+|_________________|
+    PyLZR
+OR
+|__________________________________________________|
+                    PyLZR
 
 Note to self: decide to either bring over old PyLZR code from PyCharm or 
 start from scratch on GUI (possibly better to restart because might not 
