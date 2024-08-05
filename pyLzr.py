@@ -1,58 +1,38 @@
 """
-Main file for PyLZR-
+PyLZR-
 
-probably first going to start with building a audio spectrum analyzer/visualizer 
-to read microphone input 
-  then send MIDI signal to virtual MIDI device?
-OR
-  integrate virtual MIDI device to send MIDI signals based on audio visualizer
-  values (effectively sound reactive mode)?
-which will be connected to SoundSwitch until I can build or find a 
-good DMX protocol API
- 
-AudioVisualizer -> virtual MIDI device/keyboard -> SoundSwitch -> DMX adapter -> laser
-|_________________|
-    PyLZR
-OR
-|__________________________________________________|
-                    PyLZR
-
-Note to self: decide to either bring over old PyLZR code from PyCharm or 
-start from scratch on GUI (possibly better to restart because might not 
-use OpenDMX or OLA - but maybe try OLA with ArtNet adapter?)
+Combine audio visualizer and virtual midi for sound reactive mode
 
 """
+
 import pyaudio
 import math
 import pygame
+import rtmidi
+import time
 
+### CONSTANTS and Variables
+# MIDI
+NOTE_ON = 0x90
+NOTE_OFF = 0x80
 
-#### PYGAME variables
+# PYGAME
 screen_width = 500
 screen_height = 500
-caption = "PyLZR Visualizer"
+caption = "PyLZR"
 tick_rate = 60
 
-
-### PYGAME initialization
-#initialize all imported pygame modules
-pygame.init()
-#set display
-pygame.display.set_caption(caption)
-#variable to set up screen
-screen = pygame.display.set_mode((screen_width, screen_height))
-#variable to keep track of time
-clock = pygame.time.Clock()
-
-
-### PYAUDIO variables: audio initialization
+# PYAUDIO
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 MIN_SOUND_BOUND = 10
+DAMPEN_AMP = 5
+amplitude = 100
 
-### PYAUDIO initialization
+### INITS
+# PYAUDIO
 #assign variable to the pyaudio object
 p = pyaudio.PyAudio()
 #variable stream to create open audio stream
@@ -62,8 +42,35 @@ stream = p.open(format = FORMAT,
                 input = True,
                 frames_per_buffer = CHUNK)
 
+# PYGAME
+pygame.init()
+#set display
+pygame.display.set_caption(caption)
+#variable to set up screen
+screen = pygame.display.set_mode((screen_width, screen_height))
+#variable to keep track of time
+clock = pygame.time.Clock()
+
+# MIDI
+midiout = rtmidi.MidiOut()
+available_ports = midiout.get_ports()
+
+if available_ports:
+    midiout.open_port(0)
+else: 
+    midiout.open_virtual_port("PyLZR-MIDI")
+
 
 ### METHODS
+#method to send MIDI data that a note was pressed
+def press_MIDI_note(note): 
+    note_on = [NOTE_ON, note, 112] # channel 1, note# (60 is middle C), velocity (112?)
+    note_off = [NOTE_OFF, note, 0]
+    midiout.send_message(note_on)
+    time.sleep(0.1)
+    midiout.send_message(note_off)
+    time.sleep(0.1)
+
 #method to get microphone input level
 def get_mic_input_level():
     #data variable to read audio; do not throw exception
@@ -99,35 +106,34 @@ def draw_sine_wave(amplitude):
     pygame.display.flip()
 
 
-### PYGAME WINDOW
-#CONSTANT VARIABLES
-DAMPEN_AMP = 5
-#running check bool variable
-running = True
-#set initial amplitude 
-amplitude = 100
-#cycle for pygame window
-while running: 
-    #for loop to handle any events
-    for event in pygame.event.get():
-        #capture if quit
-        if event.type == pygame.QUIT:
-            running = False
-    
-    #adjust and dampen amplitude height
-    amplitude_adjustment = get_mic_input_level() / DAMPEN_AMP
-    #set amplitude to steady low or take higher value (create min amp level)
-    amplitude = max(MIN_SOUND_BOUND, amplitude_adjustment)
+### RUNNING
+with midiout:
+    #variables 
+    running = True
 
-    #print rms for test
-    print(get_mic_input_level())
-    #draw sine wave
-    draw_sine_wave(amplitude)
-    #limit runs per second to 60
-    clock.tick(tick_rate)
+    #running
+    while running == True:
+        screen.fill(BLACK)
 
-#shut down pygame window when finished
-pygame.quit()
+        for event in pygame.event.get():
+            
+            #CHECK CLOSE
+            if event.type == pygame.QUIT:
+                done = True
+
+
+
+        #adjust and dampen amplitude height
+        amplitude_adjustment = get_mic_input_level() / DAMPEN_AMP
+        #set amplitude to steady low or take higher value (create min amp level)
+        amplitude = max(MIN_SOUND_BOUND, amplitude_adjustment)
+
+        #print rms for test
+        print(get_mic_input_level())
+        #draw sine wave
+        draw_sine_wave(amplitude)
+        #limit runs per second to 60
+        clock.tick(tick_rate)
 
 
 
