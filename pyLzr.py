@@ -112,11 +112,17 @@ def draw_sine_wave(amplitude):
     #"paint new line to screen"
     pygame.display.flip()
 
+#method to add amplitude values over 1 second (60 runs)
+
 
 
 ### RUNNING
 with midiout:
     #variables 
+    count = 0
+    amp_count = 0
+    amp_avg = 0
+
     while running:
         screen.fill(BLACK)
 
@@ -267,6 +273,16 @@ with midiout:
         print(get_mic_input_level())
         #draw sine wave
         draw_sine_wave(amplitude)
+        #METHOD TO ADD UP AMPS FROM 60 frames and return average?
+        if count == 60:
+            amp_avg = amp_count / 60
+            count = 0
+            amp_count = 0
+        else:
+            amp_count += get_mic_input_level()
+        count += 1
+        #display amp avg
+        
         #limit runs per second to 60
         clock.tick(tick_rate)
 
