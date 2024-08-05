@@ -3,6 +3,10 @@ PyLZR-
 
 Combine audio visualizer and virtual midi for sound reactive mode
 
+TO DO:
+-add mode to switch between sound reactive and keyboard control
+-experiment with sound reactiveness (compute average amp per second, then set levels?)
+
 """
 
 import pyaudio

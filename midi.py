@@ -1,10 +1,5 @@
 """
 Virtual MIDI Device 
-
-TO DO:
--add mode to switch between sound reactive and keyboard control
--experiment with sound reactiveness (compute average amp per second, then set levels?)
-
 """
 
 import pygame   # <-- supports graphical environment
