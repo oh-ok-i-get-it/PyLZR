@@ -16,6 +16,7 @@ import rtmidi
 import time
 
 ### CONSTANTS and Variables
+import pygame.display
 # MIDI
 NOTE_ON = 0x90
 NOTE_OFF = 0x80
@@ -27,6 +28,7 @@ caption = "PyLZR"
 tick_rate = 60
 BLACK = [0, 0, 0]
 WHITE = [255, 255, 255]
+BLUE = [0, 0, 128]
 running = True
 
 # PYAUDIO
@@ -94,7 +96,7 @@ def get_mic_input_level():
 #method to draw sine wave from amplitude
 def draw_sine_wave(amplitude):
     #fill screen color black
-    screen.fill((0, 0, 0))
+    #screen.fill((0, 0, 0))
     #array to store plotted points within sine wave
     points = []
     #check minimum sound level to visualize audio
@@ -123,6 +125,10 @@ with midiout:
     amp_count = 0
     amp_avg = 0
 
+    #pygame text display
+    font = pygame.font.Font("freesansbold.ttf", 32)
+
+    #run
     while running:
         screen.fill(BLACK)
 
@@ -278,11 +284,17 @@ with midiout:
             amp_avg = amp_count / 60
             count = 0
             amp_count = 0
+            font = pygame.font.Font("freesansbold.ttf", 32)
+            text = font.render(str(amp_avg), True, BLUE, BLACK)
+            textRect = text.get_rect()
+            textRect.center = (screen_width // 2, screen_height // 2)
+            screen.blit(text, textRect)
         else:
             amp_count += get_mic_input_level()
         count += 1
         #display amp avg
         
+
         #limit runs per second to 60
         clock.tick(tick_rate)
 
