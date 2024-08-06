@@ -276,12 +276,12 @@ with midiout:
         amplitude = max(MIN_SOUND_BOUND, amplitude_adjustment)
 
         #print rms for test
-        print(get_mic_input_level())
+        #print(get_mic_input_level())
         #draw sine wave
         draw_sine_wave(amplitude)
         #METHOD TO ADD UP AMPS FROM 60 frames and return average?
-        if count == 60:
-            amp_avg = amp_count / 60
+        if count == 30:
+            amp_avg = amp_count / 30
             count = 0
             amp_count = 0
             font = pygame.font.Font("freesansbold.ttf", 32)
@@ -289,6 +289,7 @@ with midiout:
             textRect = text.get_rect()
             textRect.center = (screen_width // 2, screen_height // 2)
             screen.blit(text, textRect)
+            print(amp_avg)
         else:
             amp_count += get_mic_input_level()
         count += 1
