@@ -125,6 +125,13 @@ with midiout:
     amp_count = 0
     amp_avg = 0
 
+    #KEY CONSTANTS
+    SPACE = 60
+    ONE = 61
+    TWO = 62
+    THREE = 63
+    FOUR = 64
+
     #pygame text display
     font = pygame.font.Font("freesansbold.ttf", 32)
 
@@ -269,6 +276,15 @@ with midiout:
                 if event.key == pygame.K_SLASH:
                     print("/")
                     press_MIDI_note(100)
+
+            #SOUND REACTIVE EVENT TRIGGERS
+            if amp_avg <= 20:
+                press_MIDI_note(ONE)
+            elif amp_avg > 20 and amp_avg <= 120:
+                press_MIDI_note(TWO)
+            else:
+                press_MIDI_note(THREE)
+
 
         #adjust and dampen amplitude height
         amplitude_adjustment = get_mic_input_level() / DAMPEN_AMP
