@@ -31,6 +31,12 @@ MIN_SOUND_BOUND = 10
 DAMPEN_AMP = 5
 amplitude = 100
 
+# AUDIO ANALYZER
+MODE_QUIET_CUTOFF = 1000
+MODE1_CUTOFF = 3000
+MODE2_CUTOFF = 4500
+AMP_BOOST = 10
+
 ### INITS
 # PYAUDIO
 #assign variable to the pyaudio object
@@ -51,7 +57,7 @@ screen = pygame.display.set_mode((screen_width, screen_height))
 #variable to keep track of time
 clock = pygame.time.Clock()
 
-# MIDI init
+# MIDI
 midiout = rtmidi.MidiOut()
 available_ports = midiout.get_ports()
 
@@ -61,10 +67,9 @@ else:
     midiout.open_virtual_port("PyLZR-MIDI")
 
 
+
+
 ### METHODS
-audio.get_mic_input_level(stream, CHUNK)
-
-
 #method to draw sine wave from amplitude
 def draw_sine_wave(amplitude):
     #fill screen color black
@@ -88,6 +93,8 @@ def draw_sine_wave(amplitude):
 
 #method to add amplitude values over 1 second (60 runs)
 
+#SOUNDMODE
+soundmode_mode = -1
 
 
 ### RUNNING
@@ -112,6 +119,7 @@ with midiout:
     while running:
         screen.fill(BLACK)
 
+        #BUTTON/EVENT TRIGGERS
         for event in pygame.event.get():
             
             #CHECK CLOSE
@@ -126,21 +134,38 @@ with midiout:
                 ### KEYBOARD CONTROL
                 if event.type == pygame.KEYDOWN:
                     midi.keyboard(event.key, midiout)
+    
+
+        #SOUND REACTIVE
+        if sound_mode:
+            soundmode_prev = soundmode_mode
+
+            if amp_avg < MODE_QUIET_CUTOFF:
+                soundmode_mode = 0
+            if amp_avg < MODE1_CUTOFF:
+                soundmode_mode = 1
+            elif amp_avg < MODE2_CUTOFF:
+                soundmode_mode = 2
             else:
-                #SOUND REACTIVE EVENT TRIGGERS
-                if amp_avg <= 20:
+                soundmode_mode = 3
+
+            if soundmode_prev != soundmode_mode:
+                if soundmode_mode == 0:
+                    midi.press_MIDI_note(SPACE, midiout)
+                    print("SM: 0 SENT")
+                elif soundmode_mode == 1:
                     midi.press_MIDI_note(ONE, midiout)
                     print("SM: 1 SENT")
-                elif amp_avg > 20 and amp_avg <= 120:
+                elif soundmode_mode == 2:
                     midi.press_MIDI_note(TWO, midiout)
                     print("SM: 2 SENT")
-                else:
+                else: 
                     midi.press_MIDI_note(THREE, midiout)
                     print("SM: 3 SENT")
 
-
         #adjust and dampen amplitude height
-        amplitude_adjustment = audio.get_mic_input_level(stream, CHUNK) / DAMPEN_AMP
+        raw_amplitude = audio.get_mic_input_level(stream, CHUNK)
+        amplitude_adjustment = raw_amplitude / DAMPEN_AMP
         #set amplitude to steady low or take higher value (create min amp level)
         amplitude = max(MIN_SOUND_BOUND, amplitude_adjustment)
 
@@ -160,7 +185,7 @@ with midiout:
             screen.blit(text, textRect)
             print(amp_avg)
         else:
-            amp_count += audio.get_mic_input_level(stream, CHUNK)
+            amp_count += raw_amplitude * AMP_BOOST
         count += 1
         #display amp avg
         
