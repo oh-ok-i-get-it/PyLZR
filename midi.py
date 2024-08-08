@@ -33,7 +33,7 @@ done = False
 NOTE_ON = 0x90
 NOTE_OFF = 0x80
 
-#init
+#init virtual midi
 midiout = rtmidi.MidiOut()
 available_ports = midiout.get_ports()
 
