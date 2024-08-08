@@ -2,6 +2,7 @@ import pygame
 import rtmidi
 import time
 
+
 #module constants
 #KEY CONSTANTS
 SPACE = 60
@@ -9,6 +10,7 @@ ONE = 61
 TWO = 62
 THREE = 63
 FOUR = 64
+
 
 #send midi note
 def press_MIDI_note(note, midiout): 

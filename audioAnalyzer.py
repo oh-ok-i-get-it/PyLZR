@@ -2,6 +2,7 @@ import pyaudio
 import math
 import pygame
 
+
 #method to get microphone input level
 def get_mic_input_level(stream, chunk):
     #data variable to read audio; do not throw exception
@@ -14,6 +15,7 @@ def get_mic_input_level(stream, chunk):
         rms += sample * sample
     rms = math.sqrt(rms / (chunk / 2))
     return rms
+
 
 #draw sine wave visualizer
 def draw_sine_wave(amplitude, screen, MIN_SOUND_BOUND, screen_width, screen_height):

@@ -4,6 +4,7 @@ MODE_QUIET_CUTOFF = 1000
 MODE1_CUTOFF = 7000
 MODE2_CUTOFF = 12000
 
+
 def setMode(amp_avg):
     if amp_avg < MODE_QUIET_CUTOFF:
         soundmode_mode = 0
