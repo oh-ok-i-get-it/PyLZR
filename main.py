@@ -16,7 +16,7 @@ NOTE_OFF = 0x80
 screen_width = 500
 screen_height = 500
 caption = "PyLZR"
-tick_rate = 60
+TICK_RATE = 60 #tick rate
 BLACK = [0, 0, 0]
 WHITE = [255, 255, 255]
 BLUE = [0, 0, 128]
@@ -33,9 +33,10 @@ amplitude = 100
 
 # AUDIO ANALYZER
 MODE_QUIET_CUTOFF = 1000
-MODE1_CUTOFF = 3100
-MODE2_CUTOFF = 4600
+MODE1_CUTOFF = 7000
+MODE2_CUTOFF = 12000
 AMP_BOOST = 10
+SM_TICK_RATE = 15 #ticks over which to update avg amp
 
 ### INITS
 # PYAUDIO
@@ -67,31 +68,6 @@ else:
     midiout.open_virtual_port("PyLZR-MIDI")
 
 
-
-
-### METHODS
-#method to draw sine wave from amplitude
-def draw_sine_wave(amplitude):
-    #fill screen color black
-    #screen.fill((0, 0, 0))
-    #array to store plotted points within sine wave
-    points = []
-    #check minimum sound level to visualize audio
-    if amplitude > MIN_SOUND_BOUND:
-        #for loop for creating points for sound wave
-        for x in range(screen_width): 
-            y = screen_height / 2 + int(amplitude * math.sin(x * 0.02))
-            points.append((x, y))
-    #if not enough audio, draw flat line
-    else: 
-        points.append((0, screen_height / 2))
-        points.append((screen_width, screen_height / 2))
-    #draw points to screen
-    pygame.draw.lines(screen, (255, 255, 255), False, points, 2)
-    #"paint new line to screen"
-    pygame.display.flip()
-
-#method to add amplitude values over 1 second (60 runs)
 
 #SOUNDMODE
 soundmode_mode = -1
@@ -169,13 +145,12 @@ with midiout:
         #set amplitude to steady low or take higher value (create min amp level)
         amplitude = max(MIN_SOUND_BOUND, amplitude_adjustment)
 
-        #print rms for test
-        #print(get_mic_input_level())
         #draw sine wave
-        draw_sine_wave(amplitude)
-        #METHOD TO ADD UP AMPS FROM 60 frames and return average?
-        if count == 30:
-            amp_avg = amp_count / 30
+        audio.draw_sine_wave(amplitude, screen, MIN_SOUND_BOUND, screen_width, screen_height)
+
+        #calc and output amp avg every # of ticks
+        if count == SM_TICK_RATE:
+            amp_avg = amp_count / SM_TICK_RATE
             count = 0
             amp_count = 0
             font = pygame.font.Font("freesansbold.ttf", 32)
@@ -187,11 +162,9 @@ with midiout:
         else:
             amp_count += raw_amplitude * AMP_BOOST
         count += 1
-        #display amp avg
-        
 
         #limit runs per second to 60
-        clock.tick(tick_rate)
+        clock.tick(TICK_RATE)
 
 del midiout
 
