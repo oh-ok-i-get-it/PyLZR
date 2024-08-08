@@ -1,10 +1,12 @@
 import midiKeyboard as midi
 
+# constants
 MODE_QUIET_CUTOFF = 1000
 MODE1_CUTOFF = 7000
 MODE2_CUTOFF = 12000
 
 
+#set soundmode variable to matching soundmode 
 def setMode(amp_avg):
     if amp_avg < MODE_QUIET_CUTOFF:
         soundmode_mode = 0
@@ -17,6 +19,7 @@ def setMode(amp_avg):
     return soundmode_mode
 
 
+#sent midi update of matching soundmode
 def updateMode(soundmode_mode, midiout):
     if soundmode_mode == 0:
         midi.press_MIDI_note(midi.SPACE, midiout)
@@ -32,6 +35,7 @@ def updateMode(soundmode_mode, midiout):
         print("\n>>>> SM: 3 SENT <<<<\n")
 
 
+#overloaded draw text function
 def draw_text(text, font, text_col):
     img = font.render(text, True, text_col)
     return img
