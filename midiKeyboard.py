@@ -1,6 +1,7 @@
 import pygame
 import rtmidi
 import time
+import soundMode as sm
 
 
 #module constants
@@ -10,7 +11,8 @@ ONE = 61
 TWO = 62
 THREE = 63
 FOUR = 64
-
+#pygame.init()
+#text_font = pygame.font.SysFont("Aria", 30)
 
 #send midi note
 def press_MIDI_note(note, midiout): 
@@ -31,10 +33,16 @@ def toggle_soundmode(eventKey, soundmode_on):
     if eventKey == pygame.K_LSHIFT:
         if soundmode_on:
             soundmode_on = False
-            print("SOUND MODE OFF")
+            print("\n#### SOUND MODE OFF ####\n")
+            #sm.draw_text("SM: OFF", text_font, (255,255,255), 0, 255, screen)
+            #imgTxt = "SM: OFF"
+
         else:
             soundmode_on = True
-            print("SOUND MODE ON")
+            print("\n#### SOUND MODE ON ####\n")
+            #sm.draw_text("SM: ON", text_font, (255,255,255), 0, 255, screen)
+            #imgTxt = "SM: ON"
+    #screen.blit(imgTxt, (0,0))
     return soundmode_on
 
 

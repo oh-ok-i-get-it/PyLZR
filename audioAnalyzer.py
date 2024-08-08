@@ -35,6 +35,6 @@ def draw_sine_wave(amplitude, screen, MIN_SOUND_BOUND, screen_width, screen_heig
         points.append((screen_width, screen_height / 2))
     #draw points to screen
     pygame.draw.lines(screen, (255, 255, 255), False, points, 2)
-    #"paint new line to screen"
-    pygame.display.flip()
+    
+    
 

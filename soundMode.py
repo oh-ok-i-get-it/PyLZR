@@ -20,13 +20,21 @@ def setMode(amp_avg):
 def updateMode(soundmode_mode, midiout):
     if soundmode_mode == 0:
         midi.press_MIDI_note(midi.SPACE, midiout)
-        print("SM: 0 SENT")
+        print("\n>>>> SM: 0 SENT <<<<\n")
     elif soundmode_mode == 1:
         midi.press_MIDI_note(midi.ONE, midiout)
-        print("SM: 1 SENT")
+        print("\n>>>> SM: 1 SENT <<<<\n")
     elif soundmode_mode == 2:
         midi.press_MIDI_note(midi.TWO, midiout)
-        print("SM: 2 SENT")
+        print("\n>>>> SM: 2 SENT <<<<\n")
     else: 
         midi.press_MIDI_note(midi.THREE, midiout)
-        print("SM: 3 SENT")
+        print("\n>>>> SM: 3 SENT <<<<\n")
+
+
+def draw_text(text, font, text_col):
+    img = font.render(text, True, text_col)
+    return img
+def draw_text(text, font, text_col, x, y, screen):
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x, y))

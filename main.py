@@ -142,7 +142,7 @@ with midiout:
 
         #calc and output amp avg every # of ticks !!!!!!!MOVE TO SM MODULE?????
         if count == SM_TICK_RATE:
-            amp_avg = amp_count / SM_TICK_RATE
+            amp_avg = amp_count / SM_TICK_RATE 
             count = 0
             amp_count = 0
             font = pygame.font.Font("freesansbold.ttf", 32)
@@ -150,7 +150,7 @@ with midiout:
             textRect = text.get_rect()
             textRect.center = (screen_width // 2, screen_height // 2)
             screen.blit(text, textRect)
-            print(amp_avg)
+            print(int(amp_avg))
         else:
             amp_count += raw_amplitude * AMP_BOOST
         count += 1
