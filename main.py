@@ -5,8 +5,9 @@ import math
 import pygame
 import midiKeyboard as midi
 import audioAnalyzer as audio
+import soundMode as sm
 
-### CONSTANTS and Variables
+### CONSTANTS and Variables ###################################################################
 import pygame.display
 # MIDI
 NOTE_ON = 0x90
@@ -38,7 +39,12 @@ MODE2_CUTOFF = 12000
 AMP_BOOST = 10
 SM_TICK_RATE = 15 #ticks over which to update avg amp
 
-### INITS
+#############################################################################################
+
+
+
+
+### INITS ###################################################################################
 # PYAUDIO
 #assign variable to the pyaudio object
 p = pyaudio.PyAudio()
@@ -67,13 +73,15 @@ if available_ports:
 else: 
     midiout.open_virtual_port("PyLZR-MIDI")
 
-
-
 #SOUNDMODE
 soundmode_mode = -1
 
+#################################################################################################
 
-### RUNNING
+
+
+
+### RUNNING: VIRTUAL MIDI <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 with midiout:
     #variables 
     count = 0
@@ -81,74 +89,58 @@ with midiout:
     amp_avg = 0
     sound_mode = False
 
-    #KEY CONSTANTS
-    SPACE = 60
-    ONE = 61
-    TWO = 62
-    THREE = 63
-    FOUR = 64
-
     #pygame text display
     font = pygame.font.Font("freesansbold.ttf", 32)
 
-    #run
+    ### RUNNING LOOP ############################################################################
     while running:
         screen.fill(BLACK)
 
-        #BUTTON/EVENT TRIGGERS
+        ### BUTTON/EVENT TRIGGERS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         for event in pygame.event.get():
             
-            #CHECK CLOSE
+            # CHECK CLOSE
             if event.type == pygame.QUIT:
                 running = False
 
-            #MODE SWITCH TOGGLING
+            # MODE SWITCH TOGGLING
             if event.type == pygame.KEYDOWN:
                 sound_mode = midi.toggle_soundmode(event.key, sound_mode)
 
+            # KEYBOARD MODE ------------------------------------------------------------
             if not sound_mode:
-                ### KEYBOARD CONTROL
                 if event.type == pygame.KEYDOWN:
                     midi.keyboard(event.key, midiout)
-    
+            # --------------------------------------------------------------------------
 
-        #SOUND REACTIVE
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+        # SOUND REACTIVE ---------------------------------------------------------------
         if sound_mode:
+
             soundmode_prev = soundmode_mode
 
-            if amp_avg < MODE_QUIET_CUTOFF:
-                soundmode_mode = 0
-            if amp_avg < MODE1_CUTOFF:
-                soundmode_mode = 1
-            elif amp_avg < MODE2_CUTOFF:
-                soundmode_mode = 2
-            else:
-                soundmode_mode = 3
+            soundmode_mode = sm.setMode(amp_avg)
 
             if soundmode_prev != soundmode_mode:
-                if soundmode_mode == 0:
-                    midi.press_MIDI_note(SPACE, midiout)
-                    print("SM: 0 SENT")
-                elif soundmode_mode == 1:
-                    midi.press_MIDI_note(ONE, midiout)
-                    print("SM: 1 SENT")
-                elif soundmode_mode == 2:
-                    midi.press_MIDI_note(TWO, midiout)
-                    print("SM: 2 SENT")
-                else: 
-                    midi.press_MIDI_note(THREE, midiout)
-                    print("SM: 3 SENT")
+                sm.updateMode(soundmode_mode, midiout)
+        # ------------------------------------------------------------------------------
 
-        #adjust and dampen amplitude height
+
+
+        # LIVE AUDIO ANALYSIS ----------------------------------------------------------
         raw_amplitude = audio.get_mic_input_level(stream, CHUNK)
+
         amplitude_adjustment = raw_amplitude / DAMPEN_AMP
+
         #set amplitude to steady low or take higher value (create min amp level)
         amplitude = max(MIN_SOUND_BOUND, amplitude_adjustment)
 
         #draw sine wave
         audio.draw_sine_wave(amplitude, screen, MIN_SOUND_BOUND, screen_width, screen_height)
 
-        #calc and output amp avg every # of ticks
+        #calc and output amp avg every # of ticks !!!!!!!MOVE TO SM MODULE?????
         if count == SM_TICK_RATE:
             amp_avg = amp_count / SM_TICK_RATE
             count = 0
@@ -162,10 +154,13 @@ with midiout:
         else:
             amp_count += raw_amplitude * AMP_BOOST
         count += 1
+        # -------------------------------------------------------------------------------
 
         #limit runs per second to 60
         clock.tick(TICK_RATE)
+    ##############################################################################################
 
 del midiout
 
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
