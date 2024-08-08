@@ -23,7 +23,8 @@ stream = p.open(format = FORMAT,
 #create data stream object
 data = stream.read(CHUNK)
 #unpack data stream
-data_int = struct.unpack(str(2 * CHUNK) + 'B', data)
+#data_int = struct.unpack(str(2 * CHUNK) + 'B', data)
+data_int = np.array(struct.unpack(str(CHUNK) + 'h', data))[::16] + 127
 
 #plot data
 fig, ax = plt.subplots()

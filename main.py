@@ -145,17 +145,19 @@ with midiout:
             amp_avg = amp_count / SM_TICK_RATE 
             count = 0
             amp_count = 0
-            font = pygame.font.Font("freesansbold.ttf", 32)
-            text = font.render(str(amp_avg), True, BLUE, BLACK)
-            textRect = text.get_rect()
-            textRect.center = (screen_width // 2, screen_height // 2)
-            screen.blit(text, textRect)
+            #font = pygame.font.Font("freesansbold.ttf", 32)
+            #text = font.render(str(amp_avg), True, BLUE, BLACK)
+            #textRect = text.get_rect()
+            #textRect.center = (screen_width // 2, screen_height // 2)
+            #screen.blit(text, textRect)
             print(int(amp_avg))
         else:
             amp_count += raw_amplitude * AMP_BOOST
         count += 1
         # -------------------------------------------------------------------------------
 
+
+        pygame.display.flip()
         #limit runs per second to 60
         clock.tick(TICK_RATE)
     ##############################################################################################
