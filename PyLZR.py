@@ -13,18 +13,23 @@ import soundModeClass as sm
 
 
 
-# PyLZRSSP class
-class PyLZRSSP(QWidget): # extend PyQT QWidget class
+# PyLZR class
+class PyLZR(QWidget): # extend PyQT QWidget class
 
 
 
-    ### Initialize PyLZRSSP object #######################################################################
+    ### Initialize PyLZR object #######################################################################
     def __init__(self): # initialize using QWidget superclass constructor
         super().__init__()
 
-        self.LOW_QUIET_MODE_CUTOFF = 0
-        self.LOW_MODE1_CUTOFF = 0
-        self.LOW_MODE2_CUTOFF = 0
+        # SM setup
+        self.LOW_QUIET_MODE_CUTOFF = 900   # low end mode cutoffs: 
+        self.LOW_MODE1_CUTOFF = 1000
+        self.LOW_MODE2_CUTOFF = 5000
+
+        self.HIGH_QUIET_MODE_CUTOFF = 40  # high end mode cutoffs:
+        self.HIGH_MODE1_CUTOFF = 100
+        self.HIGH_MODE2_CUTOFF = 140
 
         # Initialize audio and plot variables
         self.init_audio()
@@ -104,15 +109,6 @@ class PyLZRSSP(QWidget): # extend PyQT QWidget class
 
     ### Initialize SM ####################################################################################
     def init_soundmode(self):
-
-        # SM setup
-        self.LOW_QUIET_MODE_CUTOFF = 5000   # low end mode cutoffs: 
-        self.LOW_MODE1_CUTOFF = 900
-        self.LOW_MODE2_CUTOFF = 1000
-
-        self.HIGH_QUIET_MODE_CUTOFF = 40  # high end mode cutoffs:
-        self.HIGH_MODE1_CUTOFF = 100
-        self.HIGH_MODE2_CUTOFF = 140
 
         # Create SM object using SM setup and VM object
         self.soundmode = sm.SoundMode(self.LOW_QUIET_MODE_CUTOFF,   
@@ -203,13 +199,9 @@ class PyLZRSSP(QWidget): # extend PyQT QWidget class
         # Update the label with the current value of the slider
         value = self.count_slider.value()
         self.count_rate = value
-        self.count_label.setText(f'Avgs Calc Rate: {value}')  
+        self.count_label.setText(f'Avgs Calc Rate: {value}') 
 
-    ## idea?
-    #def update_slider_label(label, slider):
-        #value = slider.value()
-        #label.setText(f'Avgs Calc Rate: {value}')
-        #return value
+        
 
     ### Handle key press events ##########################################################################
     def keyPressEvent(self, event: QKeyEvent):
@@ -339,6 +331,6 @@ class PyLZRSSP(QWidget): # extend PyQT QWidget class
 ### >>> Run as main function <<< #########################################################################
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = PyLZRSSP()
+    window = PyLZR()
     window.show()
     sys.exit(app.exec_())
