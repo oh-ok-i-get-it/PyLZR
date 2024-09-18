@@ -1,6 +1,6 @@
 PyLZR
 
-v0.2
+v0.2 - 8/16/24
 
 !!!
 A future version of PyLZR with runtime adjustable sound mode CUTOFFs, standalone DMX functionality 
