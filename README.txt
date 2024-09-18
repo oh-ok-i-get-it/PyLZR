@@ -4,8 +4,8 @@ v0.2 - 8/16/24
 
 !!!
 A future version of PyLZR with runtime adjustable sound mode CUTOFFs, standalone DMX functionality 
-(including custom fixture profiles), dynamic sound mode, and improved optimization and codebase is 
-currently in development. However, it is not publicly available yet.
+(including custom fixture profiles and scenes), dynamic sound mode, and improved optimization and codebase is 
+currently in development. However, it is not publicly viewable yet.
 !!!
 
 DESCRIPTION:
@@ -26,10 +26,10 @@ Python program for basic DMX controlled laser machines to expand functionalities
 
 TO USE:
 Run the PyLZR.py file in the terminal console.
-The [LSHIFT] key is used as to toggle sound mode on/off (off by default). 
+The [LSHIFT] key is used to toggle sound mode on/off (off by default on startup). 
 The slider at the top of the visualizer window can be moved to adjust the rate of the intervals at which 
 the live audio is analyzed (lower value for faster/shorter, higher for slower/larger).
-To adjust the CUTOFF values for the sound modes, change the integer values assigned to their respective 
+To adjust the CUTOFF values for the sound modes, change the values assigned to their respective 
 variables in lines 26-32 of the source code for the PyLZR.py file. Keep in mind the program needs to be 
 recompiled/restarted after adjusting these values for the adjustment to take effect. 
 
