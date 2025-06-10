@@ -2,389 +2,245 @@ import sys
 import numpy as np
 import pyqtgraph as pg
 import pyaudio
-import struct
-from scipy.fftpack import fft
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QSlider
 from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, pyqtSlot, QSignalBlocker
+from scipy.fftpack import rfft
+from collections import deque
+
 import textClass as txt
-import Qtmidi as midi 
+import Qtmidi as midi
 import soundModeClass as sm
+from fftWorker import FFTWorker
 
+# Cutoff Sliders Max Value
+CUTOFF_SLIDER_MAX = 10_000
 
+class PyLZR(QWidget):
+    processAudio = pyqtSignal(np.ndarray)
 
-# PyLZR class
-class PyLZR(QWidget): # extend PyQT QWidget class
-
-
-
-    ### Initialize PyLZR object #######################################################################
-    def __init__(self): # initialize using QWidget superclass constructor
+    def __init__(self):
         super().__init__()
 
-        # SM setup
-    
-        """
-        TO DO:
-            - check D2 3's? for correct MIDI mapping from MIDI note sending
-            - ^ otherwise OK
+        # — SM & Dual-Mode setup —
+        self.LOW_QUIET_MODE_CUTOFF   = 100
+        self.LOW_MODE1_CUTOFF        = 300
+        self.LOW_MODE2_CUTOFF        = 500
+        self.HIGH_QUIET_MODE_CUTOFF  = 100
+        self.HIGH_MODE1_CUTOFF       = 300
+        self.HIGH_MODE2_CUTOFF       = 500
+        
+        self.DM_TIME_RATE = 2400
+        self.dm_count     = 0
 
-
-            ***ISSUE IS MISUNDERSTANDING OF KEY MAPPING***
-            *KEEP IN MIND WHICH KEYS ARE USED AND SEQUENCIAL AS A RESULT FOR 
-             MODES VIA FUNCTIONS AND KEY MAPPING ARRAYS!
-            *GO THROUGH TO MAKE SURE AND CHECK WHICH KEY IS WHICH FOR CORRECT MAPPING!
-            **FOR C++ REBUILD: 
-                        - SIMPLIFY ARRAYS USED FOR CLARITY IN THE FUTURE CUZ TS ANNOYING
-                        - SIMPLIFY AND COMPARTMENTALIZE FUNCTIONS FOR FURTHER CLARITY
-                        - FOCUS ON FUNCTIONAL PROGRAMMING INSTEAD OF OOP FOR LOGIC?
-                            ^ MAKE MIDI/DMX/OLA CLASS OOP AND LOGIC FUNCTIONAL PROGRAMMING
-                        -  
-
-            <<OTHERWISE>>
-                -  current OG-improved build seems to be working how designed?
-                - 
-
-
-        """
-        self.LOW_QUIET_MODE_CUTOFF = 90 #5000   # low end mode cutoffs: 
-        self.LOW_MODE1_CUTOFF = 180#10000
-        self.LOW_MODE2_CUTOFF = 200#5=18000
-
-        self.HIGH_QUIET_MODE_CUTOFF = 10#40  # high end mode cutoffs:
-        self.HIGH_MODE1_CUTOFF = 180#100
-        self.HIGH_MODE2_CUTOFF = 200#140
-                                            # Dual Mode
-        self.DM_TIME_RATE = 2400 #constant for 2 Minutes; this / count_rate = two minutes worth of counts
-        self.dm_count = 0 #variable to hold count count for ^ comparison
-        self.dm_rate = 120 #rate for comparison; holds ratio for DM_TIME_RATE / this
-
-        # Initialize audio and plot variables
+        # — Audio & plotting setup —
         self.init_audio()
         self.init_plot()
         self.init_ui()
 
-        # Audio processing rate for QTimer
-        self.audio_rate = 10 # adjust this as needed for audio processing rate
+        # — SM block accumulation using deque —
+        self._low_means = deque()
+        self._high_means = deque()
+        # Precompute per-block scale factors
+        self._low_scale = 1000.0 / self.count_rate
+        self._high_scale = 10000.0 / self.count_rate
 
-        # Initialize MIDI and set up key press handling
+        # derived DM-toggle rate
+        self.dm_rate = self.DM_TIME_RATE / self.count_rate
+        self.low_avg = 0.0
+        self.high_avg = 0.0
+
+        # — MIDI & SoundMode —
         self.vm = midi.VirtualMIDI()
-        
-        # Initialize sound mode
-        self.init_soundmode()
+        self.soundmode = sm.SoundMode(
+            self.LOW_QUIET_MODE_CUTOFF,
+            self.LOW_MODE1_CUTOFF,
+            self.LOW_MODE2_CUTOFF,
+            self.HIGH_QUIET_MODE_CUTOFF,
+            self.HIGH_MODE1_CUTOFF,
+            self.HIGH_MODE2_CUTOFF,
+            self.vm
+        )
 
-        # Set up the timer for periodic updates
+        # — FFT worker thread —
+        self.fft_thread = QThread(self)
+        self.fft_worker = FFTWorker(
+            sp_scale=self._sp_scale,
+            lo_cut=self.LOW_C_CUTOFF,
+            med_cut=self.MED_C_CUTOFF,
+            hi_cut=self.ALL_C_CUTOFF
+        )
+        self.fft_worker.moveToThread(self.fft_thread)
+        self.fft_thread.start()
+        self.processAudio.connect(self.fft_worker.process, Qt.QueuedConnection)
+        self.fft_worker.resultReady.connect(self._onSpectrumReady)
+
+        # — Timer for update loop —
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
-        self.timer.start(self.audio_rate)  
+        self.timer.start(self.audio_rate)
 
-
-
-    ### Initialize audio spectrum analyzer ###############################################################
     def init_audio(self):
-
-        # Instance fields
-        self.count_rate = 20    # spectrum avgs calculating initializations:
-        self.low = 0.0
-        self.low_avg = 0.0
-        self.high = 0.0
-        self.high_avg = 0.0
-        self.count = 0
-
-        self.wf_data = np.array([]) # audio data arrays initializations:
-        self.sp_data = np.array([])
-        self.sp_data_low = np.array([])
-        self.sp_data_high = np.array([])
-        self.sp_data_med = np.array([])
-
-        self.traces = {}    # other audio data array initializations
-        self.phase = 0
-        self.t = np.arange(0, 3.0, 0.01)
-
-        # Audio setup
-        self.FORMAT = pyaudio.paInt16
-        self.CHANNELS = 1
-        self.RATE = 44100
-        self.CHUNK = 1024 * 2  # ensure this matches the buffer size
-
-        self.LOW_R_CUTOFF = self.RATE / 128     # spectrum cutoff ranges:
+        self.count_rate = 20
+        self.CHUNK = 1024 * 2
+        self.wf_data = np.empty(self.CHUNK, dtype=np.int16)
         self.LOW_C_CUTOFF = self.CHUNK // 128
-
-        self.MED_R_CUTOFF = self.RATE / 4
         self.MED_C_CUTOFF = self.CHUNK // 4
+        self.ALL_C_CUTOFF = self.CHUNK // 2 + 1
+        self._sp_scale = 2.0 / (128.0 * self.CHUNK)
+        self.p = pyaudio.PyAudio()
+        self.stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=44100,
+            input=True,
+            output=True,
+            frames_per_buffer=self.CHUNK
+        )
+        # Precompute axes
+        self.x = np.arange(0, 2*self.CHUNK, 2)
+        self.f_low = np.linspace(0, 44100/128, self.LOW_C_CUTOFF)
+        self.f_med = np.linspace(44100/128, 44100/4, self.MED_C_CUTOFF-self.LOW_C_CUTOFF)
+        self.f_high = np.linspace(44100/4, 44100/2, self.ALL_C_CUTOFF-self.MED_C_CUTOFF)
+        # timer interval
+        self.audio_rate = int(self.CHUNK/44100*1000)
 
-        self.HIGH_R_CUTOFF = self.RATE / 4
-        self.HIGH_C_CUTOFF = self.CHUNK // 4
-
-        self.ALL_R_CUTOFF = self.RATE / 2
-        self.ALL_C_CUTOFF = self.CHUNK // 2
-
-        self.p = pyaudio.PyAudio()  # create audio stream object:
-        self.stream = self.p.open(format=self.FORMAT,
-                                  channels=self.CHANNELS,
-                                  rate=self.RATE,
-                                  input=True,
-                                  output=True,
-                                  frames_per_buffer=self.CHUNK)
-
-        self.x = np.arange(0, 2 * self.CHUNK, 2)    # init visualizer graph axis:
-        self.f_low = np.linspace(0, self.LOW_R_CUTOFF, self.LOW_C_CUTOFF)
-        self.f_med = np.linspace(self.LOW_R_CUTOFF, self.MED_R_CUTOFF, 
-                                 (self.ALL_C_CUTOFF - self.LOW_C_CUTOFF - self.HIGH_C_CUTOFF))
-        self.f_high = np.linspace(self.MED_R_CUTOFF, self.ALL_R_CUTOFF, self.HIGH_C_CUTOFF)
-        
-
-
-    ### Initialize SM ####################################################################################
-    def init_soundmode(self):
-
-        # Create SM object using SM setup and VM object
-        self.soundmode = sm.SoundMode(self.LOW_QUIET_MODE_CUTOFF,   
-                                      self.LOW_MODE1_CUTOFF, 
-                                      self.LOW_MODE2_CUTOFF, 
-                                      self.HIGH_QUIET_MODE_CUTOFF, 
-                                      self.HIGH_MODE1_CUTOFF, 
-                                      self.HIGH_MODE2_CUTOFF, 
-                                      self.vm)
-
-
-
-    ### Initialize visualizer ############################################################################
     def init_plot(self):
-
-        # Initialize the plot area
         self.plot_widget = pg.GraphicsLayoutWidget()
-        self.plot_widget.resize(1000, 600)
-        self.plot_widget.setWindowTitle("PyLZR Audio Spectrum Analyzer")
-        
         pg.setConfigOptions(antialias=True)
+        # waveform
+        wf_x = pg.AxisItem(orientation='bottom')
+        wf_x.setTicks([[(0,'0'),(1024,'1024'),(2048,'2048'),(3072,'3072'),(4096,'4096')]])
+        self.waveform = self.plot_widget.addPlot(title='WAVEFORM',row=1,col=1,axisItems={'bottom':wf_x})
+        self.waveform.setYRange(0,255,padding=0)
+        self.waveform.setXRange(0,2*self.CHUNK,padding=0.005)
+        # spectrum
+        sp_x = pg.AxisItem(orientation='bottom')
+        sp_x.setTicks([[(np.log10(10),'10Hz'),(np.log10(100),'100Hz'),(np.log10(250),'250Hz'),
+                        (np.log10(400),'400Hz'),(np.log10(1000),'1kHz'),(np.log10(22050),'22kHz')]])
+        self.spectrum = self.plot_widget.addPlot(title='SPECTRUM',row=2,col=1,axisItems={'bottom':sp_x})
+        self.spectrum.setLogMode(x=True,y=True)
+        self.spectrum.setYRange(-4,0,padding=0)
+        self.spectrum.setXRange(np.log10(20),np.log10(44100/2),padding=0.005)
+        for plot in (self.waveform,self.spectrum):
+            plot.getViewBox().keyPressEvent=lambda ev:ev.ignore()
+        self.traces={}
 
-        # Setup plots
-        wf_xlabels = [(0, '0'), (1024, '1024'), (2048, '2048'), (3072, '3072'), (4096, '4096')]
-        wf_xaxis = pg.AxisItem(orientation='bottom')
-        wf_xaxis.setTicks([wf_xlabels])
-
-        sp_xlabels = [
-            (np.log10(10), '10 Hz'),
-            (np.log10(100), '100 Hz'),
-            (np.log10(250), '250 Hz'),
-            (np.log10(400), '400 Hz'),
-            (np.log10(1000), '1000 Hz'),
-            (np.log10(22050), '22050 Hz')
-        ]
-        sp_xaxis = pg.AxisItem(orientation='bottom')
-        sp_xaxis.setTicks([sp_xlabels])
-
-        self.waveform = self.plot_widget.addPlot(title="WAVEFORM", 
-                                                 row=1, col=1, 
-                                                 axisItems={'bottom': wf_xaxis})
-        self.spectrum = self.plot_widget.addPlot(title="SPECTRUM", 
-                                                 row=2, col=1, 
-                                                 axisItems={'bottom': sp_xaxis})
-
-
-
-    ### Iniitalize PyQT UI ###############################################################################
     def init_ui(self):
-
-        # Initialize the user interface
         self.setWindowTitle('PyLZR : SSP3CTRUM')
-        self.setGeometry(100, 100, 1200, 800)
-
-        # Avgs calc rate slider and label
-        self.count_slider = QSlider(Qt.Horizontal, self)
-        self.count_slider.setMinimum(10)
-        self.count_slider.setMaximum(50)
-        self.count_slider.setValue(self.count_rate)  # Set initial value
+        self.setGeometry(100,100,1200,800)
+        layout=QVBoxLayout()
+        # avg-rate slider
+        self.count_slider=QSlider(Qt.Horizontal,self)
+        self.count_slider.setRange(10,50)
+        self.count_slider.setValue(self.count_rate)
         self.count_slider.setTickInterval(5)
         self.count_slider.setTickPosition(QSlider.TicksBelow)
-
-        self.count_label = QLabel("Avgs Calc Rate: " + str(self.count_rate), self)
-
-        # Update widgets
-        self.count_slider.valueChanged.connect(self.update_count_slider_label) # avgs calc rate update
-            
-        # Key label
-        self.key_label = QLabel('Press any key', self)
-
-
-        layout = QVBoxLayout() # define layout
-
-
-        # Add widgets to the layout
-        layout.addWidget(self.count_slider) # avgs calc rate widget:
+        self.count_slider.valueChanged.connect(self._on_count_rate_change)
+        self.count_label=QLabel(f'Avgs Calc Rate: {self.count_rate}',self)
+        layout.addWidget(self.count_slider)
         layout.addWidget(self.count_label)
-
-        layout.addWidget(self.key_label)    # plot widgets:
+        # low-mode sliders
+        for mode in range(3):
+            lbl=QLabel(self)
+            init=[self.LOW_QUIET_MODE_CUTOFF,self.LOW_MODE1_CUTOFF,self.LOW_MODE2_CUTOFF][mode]
+            lbl.setText(f"Low {'Quiet' if mode==0 else f'Mode{mode}'} Cutoff: {init}")
+            sld=QSlider(Qt.Horizontal,self);
+            sld.setRange(0,CUTOFF_SLIDER_MAX);sld.setValue(init)
+            sld.valueChanged.connect(lambda v,m=mode,sl=sld:self._on_low_cutoff_change(v,m,sl))
+            layout.addWidget(lbl);layout.addWidget(sld)
+            setattr(self,f'low_{mode}_label',lbl)
+        # high-mode sliders
+        for mode in range(3):
+            lbl=QLabel(self)
+            init=[self.HIGH_QUIET_MODE_CUTOFF,self.HIGH_MODE1_CUTOFF,self.HIGH_MODE2_CUTOFF][mode]
+            lbl.setText(f"High {'Quiet' if mode==0 else f'Mode{mode}'} Cutoff: {init}")
+            sld=QSlider(Qt.Horizontal,self);
+            sld.setRange(0,CUTOFF_SLIDER_MAX);sld.setValue(init)
+            sld.valueChanged.connect(lambda v,m=mode,sl=sld:self._on_high_cutoff_change(v,m,sl))
+            layout.addWidget(lbl);layout.addWidget(sld)
+            setattr(self,f'high_{mode}_label',lbl)
+        # key label + plot
+        self.key_label=QLabel('Press any key',self)
+        layout.addWidget(self.key_label)
         layout.addWidget(self.plot_widget)
+        self.setLayout(layout)
 
-        self.setLayout(layout)  # set layout
+    def _on_count_rate_change(self,val):
+        self.count_rate=val;self.count_label.setText(f'Avgs Calc Rate: {val}')
+        self._low_scale=1000.0/val;self._high_scale=10000.0/val;self.dm_rate=self.DM_TIME_RATE/val
+        self._low_means.clear();self._high_means.clear()
 
+    def _on_low_cutoff_change(self,val,mode,slider):
+        if mode==0: val=min(val,self.LOW_MODE1_CUTOFF)
+        elif mode==1: val=max(val,self.LOW_QUIET_MODE_CUTOFF);val=min(val,self.LOW_MODE2_CUTOFF)
+        else: val=max(val,self.LOW_MODE1_CUTOFF)
+        if slider.value()!=val:
+            with QSignalBlocker(slider): slider.setValue(val)
+        setattr(self,['LOW_QUIET_MODE_CUTOFF','LOW_MODE1_CUTOFF','LOW_MODE2_CUTOFF'][mode],val)
+        sm.set_cutoff(self.soundmode,val,mode,high=False)
+        lbl=getattr(self,f'low_{mode}_label');lbl.setText(f"Low {'Quiet' if mode==0 else f'Mode{mode}'} Cutoff: {val}")
 
+    def _on_high_cutoff_change(self,val,mode,slider):
+        if mode==0: val=min(val,self.HIGH_MODE1_CUTOFF)
+        elif mode==1: val=max(val,self.HIGH_QUIET_MODE_CUTOFF);val=min(val,self.HIGH_MODE2_CUTOFF)
+        else: val=max(val,self.HIGH_MODE1_CUTOFF)
+        if slider.value()!=val:
+            with QSignalBlocker(slider): slider.setValue(val)
+        setattr(self,['HIGH_QUIET_MODE_CUTOFF','HIGH_MODE1_CUTOFF','HIGH_MODE2_CUTOFF'][mode],val)
+        sm.set_cutoff(self.soundmode,val,mode,high=True)
+        lbl=getattr(self,f'high_{mode}_label');lbl.setText(f"High {'Quiet' if mode==0 else f'Mode{mode}'} Cutoff: {val}")
 
-    ### Update slider label #############################################################################
-    def update_count_slider_label(self):
-        # Update the label with the current value of the slider
-        value = self.count_slider.value()
-        self.count_rate = value
-        self.count_label.setText(f'Avgs Calc Rate: {value}') 
-
-        #for Dual Mode
-        self.set_dm_rate()
-
-        
-
-    ### Handle key press events ##########################################################################
-    def keyPressEvent(self, event: QKeyEvent):
-
-        # Create key event objects
-        key = event.key()
-        key_name = event.text()  # get the text of the key
-
-        # Send MIDI signal
-        self.vm.keyboard(key)
-
-        # Update the key label with the key press information
-        self.key_label.setText(f'Key pressed: {key_name} (Qt Key Code: {key})')
+    def keyPressEvent(self,event:QKeyEvent):
+        self.vm.keyboard(event.key())
+        self.key_label.setText(f'Key: {event.text()} (code {event.key()})')
         super().keyPressEvent(event)
 
-
-
-    ### Plot the data for each graph #####################################################################
-    def set_plotdata(self, name, data_x, data_y):
-
-        # Check if plot has already been plotted before (and if so, update data accordingly)
-        if name in self.traces: 
-            self.traces[name].setData(data_x, data_y)
-        # If plot data has not been plotted, set plot and add to plotted data list
-        else: 
-            match name: # match plot data to respective formatting
-                case 'waveform':
-                    self.traces[name] = self.waveform.plot(pen='c', width=3)
-                    self.waveform.setYRange(0, 255, padding=0)
-                    self.waveform.setXRange(0, 2 * self.CHUNK, padding=0.005)
-                case 'sepctrum':
-                    self.set_sp_plot(name, 'g')
-                case 'spectrum_med':
-                    self.set_sp_plot(name, 'b')
-                case 'spectrum_low':
-                    self.set_sp_plot(name, 'y')
-                case 'spectrum_high':
-                    self.set_sp_plot(name, 'm')
-            
-
-
-    ### Plot the graph data for spectrums ################################################################
-    def set_sp_plot(self, name, pen_color):
-
-        # Add plot name to list of plots plotted, set to log mode, set x and y ranges of plots
-        self.traces[name] = self.spectrum.plot(pen = pen_color, width = 3)
-        self.spectrum.setLogMode(x=True, y=True)
-        self.spectrum.setYRange(-4, 0, padding=0)
-        self.spectrum.setXRange(np.log10(20), np.log10(self.RATE / 2), padding=0.005)
-
-
-
-    ### Update and visualize the data read from the audio stream, and handle SM and MIDI ##################
     def update(self):
-
         try:
-            # Read audio data
-            wf_data = self.stream.read(self.CHUNK, exception_on_overflow=False)
-            self.wf_data = np.array(struct.unpack(str(self.CHUNK) + 'h', wf_data)) + 127
-            self.set_plotdata(name='waveform', data_x=self.x, data_y=self.wf_data)
+            raw=self.stream.read(self.CHUNK, exception_on_overflow=False)
+            audio=np.frombuffer(raw,dtype=np.int16)
+            self.wf_data[:]=audio+127
+            if 'waveform' not in self.traces:
+                self.traces['waveform']=self.waveform.plot(pen='c',width=3)
+            self.traces['waveform'].setData(self.x,self.wf_data)
+            self.processAudio.emit(self.wf_data.copy())
+        except IOError as e: print(f"Audio I/O Error: {e}")
 
-            # Process spectrum
-            self.sp_data = fft(np.array(self.wf_data) - 128)    # convert audio stream data from wavelength to spectrum 
+    @pyqtSlot(np.ndarray,np.ndarray,np.ndarray)
+    def _onSpectrumReady(self,low,med,high):
+        self.sp_data_low,self.sp_data_med,self.sp_data_high=low,med,high
+        for name,data,axis in(
+            ('spectrum_low',low,self.f_low),('spectrum_med',med,self.f_med),('spectrum_high',high,self.f_high)
+        ):
+            if name not in self.traces:
+                pen={'spectrum_low':'y','spectrum_med':'b','spectrum_high':'m'}[name]
+                self.traces[name]=self.spectrum.plot(pen=pen,width=3)
+            self.traces[name].setData(axis,data)
+        self.run_sm()
 
-            # section spectrum data into low, med, and high spectrums
-            self.sp_data_low = np.abs(self.sp_data[0:int(self.LOW_C_CUTOFF)]) * 2 / (128 * self.CHUNK) 
-            self.sp_data_med = np.abs(self.sp_data[int(self.LOW_C_CUTOFF):int(self.MED_C_CUTOFF)]) * 2 / (128 * self.CHUNK)
-            self.sp_data_high = np.abs(self.sp_data[int(self.MED_C_CUTOFF):int(self.ALL_C_CUTOFF)]) * 2 / (128 * self.CHUNK)
-
-            # pot the spectrum data
-            self.set_plotdata(name='spectrum_med', data_x=self.f_med, data_y=self.sp_data_med)
-            self.set_plotdata(name='spectrum_low', data_x=self.f_low, data_y=self.sp_data_low)
-            self.set_plotdata(name='spectrum_high', data_x=self.f_high, data_y=self.sp_data_high)
-
-            # label on visualizer
-            self.key_label.setText(f'Low Avg: {self.low_avg:.6f} | High Avg: {self.high_avg:.6f}')
-
-            # run SM
-            self.run_sm()
-
-        # handle audio stream data read error
-        except IOError as e:
-            print(f"Error reading audio data: {e}")
-
-
-
-    ### Run SM functionalities ###########################################################################
     def run_sm(self):
+        low_m=self.sp_data_low.mean();high_m=self.sp_data_high.mean()
+        self._low_means.append(low_m);self._high_means.append(high_m)
+        if len(self._low_means)>=self.count_rate:
+            sum_l=sum(self._low_means);sum_h=sum(self._high_means)
+            self.low_avg=sum_l*self._low_scale;self.high_avg=sum_h*self._high_scale
+            self._low_means.clear();self._high_means.clear()
+            self.dm_count=(self.dm_count+1)%int(self.dm_rate)
+            if self.vm.sm_ON: self.soundmode.check_mode(self.low_avg,self.high_avg)
+            print(f"{txt.YELLOW}{txt.I}LOW: {txt.IOFF}{txt.B}{self.low_avg:.2f}{txt.BOFF}\t"+ 
+                  f"{txt.PURPLE}{txt.I}HIGH: {txt.IOFF}{txt.B}{self.high_avg:.2f}{txt.BOFF}")
+            print(f"DM COUNT: {self.dm_count}   DM RATE: {self.dm_rate}")
+            print(f"DM ON?: {self.soundmode.get_dm_mode_bool()}")
+            self.key_label.setText(f"Low Avg: {self.low_avg:.6f} | High Avg: {self.high_avg:.6f}")
 
-        # check if it should continue calculating SM avgs
-        if self.count < self.count_rate:
-            self.low += self.get_sp_avg_low()
-            self.high += self.get_sp_avg_high()
-            self.count += 1
-
-        # check if should calculate and display SM avgs
-        else:
-            self.low_avg = (self.low / self.count_rate) * 1000
-            self.high_avg = (self.high / self.count_rate) * 10000
-            self.low = 0
-            self.high = 0
-            self.count = 0
-
-            #DUAL MODE
-            self.check_dm_mode()    #moved to before checkmode in order to fix toggle issue?
-
-            # check if SM on
-            if self.vm.sm_ON:
-                # check what modes spectrum avgs should be set to 
-                self.soundmode.check_mode(self.low_avg, self.high_avg)
-
-            # display spectrum avgs
-            print(txt.YELLOW + txt.I + "LOW: " + txt.IOFF + txt.B + str(self.low_avg) + txt.BOFF, end = "\t")
-            print(txt.PURPLE + txt.I + "HIGH: " + txt.IOFF + txt.B + str(self.high_avg) + txt.BOFF)
-
-            #Dual Mode
-            #self.check_dm_mode()    #perform dual mode check
-            print("DM COUNT: " + str(self.dm_count))
-            print("DM RATE: " + str(self.dm_rate))
-            #print("DM ")
-            print("DM ON?: " + str(self.soundmode.get_dm_mode_bool()))
-
-    ### Update dm_rate when adjusted via slider ####
-    def set_dm_rate(self):
-        self.dm_rate = self.DM_TIME_RATE / self.count_rate
-
-    ### Check and toggle Dual mode if been long enough #### 
-    def check_dm_mode(self):
-        if self.dm_count > self.dm_rate:
-            self.dm_count = 0
-            self.soundmode.toggle_dm_mode()
-
-        else :
-            self.dm_count += 1
+    def closeEvent(self,event):
+        self.timer.stop();self.stream.stop_stream();self.stream.close();self.p.terminate()
+        self.fft_thread.quit();self.fft_thread.wait();super().closeEvent(event)
 
 
-
-    ### Get spectrum avg for low end spectrum data #######################################################
-    def get_sp_avg_low(self):
-        return np.mean(self.sp_data_low)
-    
-
-
-    ### Get spectrum avg for high end spectrum data ######################################################
-    def get_sp_avg_high(self):
-        return np.mean(self.sp_data_high)
-
-
-
-### >>> Run as main function <<< #########################################################################
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = PyLZR()
+if __name__=='__main__':
+    app=QApplication(sys.argv)
+    window=PyLZR()
     window.show()
     sys.exit(app.exec_())

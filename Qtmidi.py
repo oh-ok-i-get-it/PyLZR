@@ -1,6 +1,7 @@
 import time
 import rtmidi as midi
 import textClass as txt
+import threading
 
 class VirtualMIDI():
     def __init__(self):
@@ -216,11 +217,17 @@ class VirtualMIDI():
         note_on = [NOTE_ON, note, 112] # channel 1, note# (60 is middle C), velocity (112?)
         note_off = [NOTE_OFF, note, 0]
         self.midiout.send_message(note_on)
-        time.sleep(0.1)
-        self.midiout.send_message(note_off)
-        time.sleep(0.1)
-        midiNote = str(note)
-        #print("SEND MIDI: " + midiNote)
+        #time.sleep(0.05)
+
+        def send_off():
+            self.midiout.send_message(note_off)
+
+        threading.Timer(0.05, send_off).start()
+
+        # make threads daemon to prevent blocking shutdown
+        t = threading.Timer(0.1, send_off)
+        t.daemon = True
+        t.start()
 
 
     def toggle_sm(self):
