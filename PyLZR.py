@@ -23,13 +23,41 @@ class PyLZR(QWidget): # extend PyQT QWidget class
         super().__init__()
 
         # SM setup
-        self.LOW_QUIET_MODE_CUTOFF = 900   # low end mode cutoffs: 
-        self.LOW_MODE1_CUTOFF = 1000
-        self.LOW_MODE2_CUTOFF = 5000
+    
+        """
+        TO DO:
+            - check D2 3's? for correct MIDI mapping from MIDI note sending
+            - ^ otherwise OK
 
-        self.HIGH_QUIET_MODE_CUTOFF = 40  # high end mode cutoffs:
-        self.HIGH_MODE1_CUTOFF = 100
-        self.HIGH_MODE2_CUTOFF = 140
+
+            ***ISSUE IS MISUNDERSTANDING OF KEY MAPPING***
+            *KEEP IN MIND WHICH KEYS ARE USED AND SEQUENCIAL AS A RESULT FOR 
+             MODES VIA FUNCTIONS AND KEY MAPPING ARRAYS!
+            *GO THROUGH TO MAKE SURE AND CHECK WHICH KEY IS WHICH FOR CORRECT MAPPING!
+            **FOR C++ REBUILD: 
+                        - SIMPLIFY ARRAYS USED FOR CLARITY IN THE FUTURE CUZ TS ANNOYING
+                        - SIMPLIFY AND COMPARTMENTALIZE FUNCTIONS FOR FURTHER CLARITY
+                        - FOCUS ON FUNCTIONAL PROGRAMMING INSTEAD OF OOP FOR LOGIC?
+                            ^ MAKE MIDI/DMX/OLA CLASS OOP AND LOGIC FUNCTIONAL PROGRAMMING
+                        -  
+
+            <<OTHERWISE>>
+                -  current OG-improved build seems to be working how designed?
+                - 
+
+
+        """
+        self.LOW_QUIET_MODE_CUTOFF = 90 #5000   # low end mode cutoffs: 
+        self.LOW_MODE1_CUTOFF = 180#10000
+        self.LOW_MODE2_CUTOFF = 200#5=18000
+
+        self.HIGH_QUIET_MODE_CUTOFF = 10#40  # high end mode cutoffs:
+        self.HIGH_MODE1_CUTOFF = 180#100
+        self.HIGH_MODE2_CUTOFF = 200#140
+                                            # Dual Mode
+        self.DM_TIME_RATE = 2400 #constant for 2 Minutes; this / count_rate = two minutes worth of counts
+        self.dm_count = 0 #variable to hold count count for ^ comparison
+        self.dm_rate = 120 #rate for comparison; holds ratio for DM_TIME_RATE / this
 
         # Initialize audio and plot variables
         self.init_audio()
@@ -37,7 +65,7 @@ class PyLZR(QWidget): # extend PyQT QWidget class
         self.init_ui()
 
         # Audio processing rate for QTimer
-        self.audio_rate = 20 # adjust this as needed for audio processing rate
+        self.audio_rate = 10 # adjust this as needed for audio processing rate
 
         # Initialize MIDI and set up key press handling
         self.vm = midi.VirtualMIDI()
@@ -201,6 +229,9 @@ class PyLZR(QWidget): # extend PyQT QWidget class
         self.count_rate = value
         self.count_label.setText(f'Avgs Calc Rate: {value}') 
 
+        #for Dual Mode
+        self.set_dm_rate()
+
         
 
     ### Handle key press events ##########################################################################
@@ -305,6 +336,9 @@ class PyLZR(QWidget): # extend PyQT QWidget class
             self.high = 0
             self.count = 0
 
+            #DUAL MODE
+            self.check_dm_mode()    #moved to before checkmode in order to fix toggle issue?
+
             # check if SM on
             if self.vm.sm_ON:
                 # check what modes spectrum avgs should be set to 
@@ -313,7 +347,27 @@ class PyLZR(QWidget): # extend PyQT QWidget class
             # display spectrum avgs
             print(txt.YELLOW + txt.I + "LOW: " + txt.IOFF + txt.B + str(self.low_avg) + txt.BOFF, end = "\t")
             print(txt.PURPLE + txt.I + "HIGH: " + txt.IOFF + txt.B + str(self.high_avg) + txt.BOFF)
-            
+
+            #Dual Mode
+            #self.check_dm_mode()    #perform dual mode check
+            print("DM COUNT: " + str(self.dm_count))
+            print("DM RATE: " + str(self.dm_rate))
+            #print("DM ")
+            print("DM ON?: " + str(self.soundmode.get_dm_mode_bool()))
+
+    ### Update dm_rate when adjusted via slider ####
+    def set_dm_rate(self):
+        self.dm_rate = self.DM_TIME_RATE / self.count_rate
+
+    ### Check and toggle Dual mode if been long enough #### 
+    def check_dm_mode(self):
+        if self.dm_count > self.dm_rate:
+            self.dm_count = 0
+            self.soundmode.toggle_dm_mode()
+
+        else :
+            self.dm_count += 1
+
 
 
     ### Get spectrum avg for low end spectrum data #######################################################
