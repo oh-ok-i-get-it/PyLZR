@@ -1,6 +1,36 @@
 import textClass as txt
+from bisect import bisect_right
 
 class SoundMode():
+    # const lookup tables
+    LOW_COLOR = {
+        0: txt.YELLOW,
+        1: txt.BLUE,
+        2: txt.CYAN,
+        3: txt.PURPLE,
+    }
+
+    HIGH_COLOR = {
+        0: txt.YELLOW,
+        1: txt.BLUE,
+        2: txt.CYAN,
+        3: txt.PURPLE,
+    }
+
+    MODE_MAP = {
+        0: {0: "SPACE", 1: 60,  2: 61,  3: 62},
+        1: {0: 63,       1: 64,  2: 65,  3: 66},
+        2: {0: 67,       1: 68,  2: 69,  3: 70},
+        3: {0: 71,       1: 73,  2: 74,  3: 75},
+    }
+
+    _CUT_ATTRS = {
+        'low':  ['low_quiet_mode_cutoff', 'LOW_MODE1_CUTOFF', 'LOW_MODE2_CUTOFF'],
+        'high': ['HIGH_MODE_QUIET_CUTOFF', 'HIGH_MODE1_CUTOFF', 'HIGH_MODE2_CUTOFF'],
+    }
+
+
+
     def __init__(self, 
                  low_quiet_mode_cutoff, 
                  LOW_MODE1_CUTOFF, 
@@ -26,111 +56,91 @@ class SoundMode():
         self.high_mode = -1
         self.high_prev_mode = 0
 
-    def set_mode(self, low_avg, high_avg):
-        if low_avg < self.low_quiet_mode_cutoff:
-            self.low_mode = 0
-        elif low_avg < self.LOW_MODE1_CUTOFF:
-            self.low_mode = 1
-        elif low_avg < self.LOW_MODE2_CUTOFF:
-            self.low_mode = 2
-        else: 
-            self.low_mode = 3
+        # Dual Mode
+        self.dm_ON = False
 
-        if high_avg < self.HIGH_MODE_QUIET_CUTOFF:
-            self.high_mode = 0
-        elif high_avg < self.HIGH_MODE1_CUTOFF:
-            self.high_mode = 1
-        elif high_avg < self.HIGH_MODE2_CUTOFF:
-            self.high_mode = 2
-        else: 
-            self.high_mode = 3
+        self.SPACE = 106 #108
+
+        # build mode cutoffs thresholds lists
+        self._low_thresholds  = [
+            self.low_quiet_mode_cutoff,
+            self.LOW_MODE1_CUTOFF,
+            self.LOW_MODE2_CUTOFF,
+        ]
+        self._high_thresholds = [
+            self.HIGH_MODE_QUIET_CUTOFF,
+            self.HIGH_MODE1_CUTOFF,
+            self.HIGH_MODE2_CUTOFF,
+        ]
+
+
+
+    def set_mode(self, low_avg, high_avg):
+        self.low_mode = bisect_right(self._low_thresholds, low_avg)
+        self.high_mode = bisect_right(self._high_thresholds, high_avg)
         
     
+
     def update_mode(self):
         lm = self.low_mode
         hm = self.high_mode
-        match lm: 
-            case 0:
-                text = txt.YELLOW + txt.I + "\n>>>> SM: " + txt.B + "LOW" + txt.BOFF + " 0 SENT \t" + txt.RESET
-                match hm:
-                    case 0:
-                        self.send_mode(text, 108, txt.YELLOW, '0')
-                    case 1:
-                        self.send_mode(text, 60, txt.BLUE, '1')
-                    case 2:
-                        self.send_mode(text, 61, txt.CYAN, '2')
-                    case 3:
-                        self.send_mode(text, 62, txt.PURPLE, '3')
-            case 1:
-                text = txt.BLUE + txt.I + "\n>>>> SM: " + txt.B + "LOW" + txt.BOFF + " 1 SENT \t" + txt.RESET
-                match hm:
-                    case 0:
-                        self.send_mode(text, 63, txt.YELLOW, '0')
-                    case 1:
-                        self.send_mode(text, 64, txt.BLUE, '1')
-                    case 2:
-                        self.send_mode(text, 65, txt.CYAN, '2')
-                    case 3: 
-                        self.send_mode(text, 66, txt.PURPLE, '3')
-            case 2:
-                text = txt.CYAN + txt.I + "\n>>>> SM: " + txt.B + "LOW" + txt.BOFF + " 2 SENT \t" + txt.RESET
-                match hm:
-                    case 0:
-                        self.send_mode(text, 67, txt.YELLOW, '0')
-                    case 1:
-                        self.send_mode(text, 68, txt.BLUE, '1')
-                    case 2:
-                        self.send_mode(text, 69, txt.CYAN, '2')
-                    case 3:
-                        self.send_mode(text, 70, txt.PURPLE, '3')
-            case 3:
-                text = txt.PURPLE + txt.I + "\n>>>> SM: " + txt.B + "LOW" + txt.BOFF + " 3 SENT \t" + txt.RESET
-                match hm:
-                    case 0:
-                        self.send_mode(text, 71, txt.YELLOW, '0')
-                    case 1:
-                        self.send_mode(text, 73, txt.BLUE, '1')
-                    case 2:
-                        self.send_mode(text, 74, txt.CYAN, '2')
-                    case 3:
-                        self.send_mode(text, 75, txt.PURPLE, '3')
+        
+        # build display text
+        text = (
+            f"{self.LOW_COLOR[lm]}{txt.I}"
+            f"\n>>>> SM: {txt.B}LOW{txt.BOFF} {lm} SENT \t{txt.RESET}"
+        )
+
+        # base MIDI note
+        offset = self.MODE_MAP[lm].get(hm, "SPACE")
+        MIDI_base = self.SPACE if offset == "SPACE" else offset
+
+        # Dual Mode midi behavior
+        if (not self.dm_ON) or (MIDI_base == self.SPACE):
+            note = MIDI_base
+            mode_label = 1
+        else:
+            note = MIDI_base + 16
+            mode_label = 2
+
+        # send MIDI and print
+        self.midiout.press_MIDI_note(note)
+        color = self.HIGH_COLOR[hm]
+        digit = str(hm)
+        print(f"{text}\t{txt.B}{color}HIGH{txt.BOFF} {digit} SENT <<<<\n{txt.IOFF}")
+        print(f"{txt.WHITE}\t|| DUAL MODE: {mode_label} ||\n\tMIDI NOTE: {note}")
+
 
 
     def check_mode(self, low_avg, high_avg):
-        self.low_prev_mode = self.low_mode
-        self.high_prev_mode = self.high_mode
+        prev = (self.low_mode, self.high_mode)
+
         self.set_mode(low_avg, high_avg)
 
-        if self.low_mode != self.low_prev_mode or self.high_mode != self.high_prev_mode:
+        if (self.low_mode, self.high_mode) != prev:
             self.update_mode()
 
-
-    def send_mode(self, text, midi_note, color, mode):
-        self.midiout.press_MIDI_note(midi_note)
-        print(text + "\t" + txt.B + color + "HIGH" + txt.BOFF + " " + mode + " SENT <<<<\n" + txt.IOFF)
-
-
-
-
-### ADD METHOD TO CHANGE CUTOFF VARIABLES FOR MAIN FILE?
-
-    def set_low_cutoff(self, cutoff, mode):
-        match mode:
-            case 0:
-                self.low_quiet_mode_cutoff = cutoff
-            case 1:
-                self.LOW_MODE1_CUTOFF = cutoff
-            case 2:
-                self.LOW_MODE2_CUTOFF = cutoff
     
-    def set_high_cutoff(self, cutoff, mode):
-        match mode:
-            case 0:
-                self.HIGH_MODE_QUIET_CUTOFF = cutoff
-            case 1:
-                self.HIGH_MODE1_CUTOFF = cutoff
-            case 2:
-                self.HIGH_MODE2_CUTOFF = cutoff
+            
+    def toggle_dm_mode(self):
+        self.dm_ON = (not self.dm_ON)
 
 
-        
+
+    def get_dm_mode_bool(self):
+        return self.dm_ON
+
+
+
+def set_cutoff(self, cutoff: float, mode: int, *, high: bool = False):
+    key = 'high' if high else 'low'
+    attr_name = self._CUT_ATTRS[key][mode]
+    setattr(self, attr_name, cutoff)
+    if high:
+        self._high_thresholds[mode] = cutoff
+    else:
+        self._low_thresholds[mode] = cutoff
+
+
+
+
