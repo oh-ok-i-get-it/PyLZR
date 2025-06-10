@@ -1,10 +1,10 @@
 PyLZR
 
-v0.2 - 8/16/24
+v0.3 - 6/9/25
 
 !!!
-A future version of PyLZR with runtime adjustable sound mode CUTOFFs, standalone DMX functionality 
-(including custom fixture profiles and scenes), dynamic sound mode, and improved optimization and codebase is 
+A future version of PyLZR with standalone DMX functionality (including custom fixture profiles and scenes), 
+dynamic sound mode, and improved optimization and codebase is 
 currently in development. However, it is not publicly viewable yet.
 !!!
 
@@ -29,9 +29,8 @@ Run the PyLZR.py file in the terminal console.
 The [LSHIFT] key is used to toggle sound mode on/off (off by default on startup). 
 The slider at the top of the visualizer window can be moved to adjust the rate of the intervals at which 
 the live audio is analyzed (lower value for faster/shorter, higher for slower/larger).
-To adjust the CUTOFF values for the sound modes, change the values assigned to their respective 
-variables in lines 26-32 of the source code for the PyLZR.py file. Keep in mind the program needs to be 
-recompiled/restarted after adjusting these values for the adjustment to take effect. 
+The sliders below can be adjusted change sound mode cutoff thresholds at runtime. Threshold sliders maximum can
+be defined in the PyLZR.py file with the CUTOFF_SLIDER_MAX constant on line 17.
 
 
 MODULES/LIBRARIES USED:
@@ -53,15 +52,16 @@ aspects and features):
         allowing the user to map keyboard keys (corresponding to the virtual MIDI) to various customizable 
         modes in SoundSwitch. 
 
-    * sound mode CUTOFF values being non-adjustable during runtime and requiring editing of source code 
+    * further optimization is in-progress 
 
 Keep in mind:
 
     * because of the priority of functionality over non-essential features due to time constraints, this 
-    version is not fully optimized nor is the source code designed in a way that is preferable. 
+    version is not fully optimized nor is the source code designed in a way that is entirely preferable. 
 
     * this version is mainly being kept as a record of the first functional version of PyLZR because it 
-    was successful for my first live venue gig
+    was successful for my first live venue gig, with some improvements being made over time for those that
+    prefer Python as their coding language (a C++ version is currently in development)
 
     * this version was only tested on MacOS 12.7.5 and later and has not been tested on Windows or Linux
 
