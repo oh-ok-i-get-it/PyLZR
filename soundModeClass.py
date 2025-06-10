@@ -21,7 +21,7 @@ class SoundMode():
         0: {0: "SPACE", 1: 60,  2: 61,  3: 62},
         1: {0: 63,       1: 64,  2: 65,  3: 66},
         2: {0: 67,       1: 68,  2: 69,  3: 70},
-        3: {0: 71,       1: 73,  2: 74,  3: 75},
+        3: {0: 71,       1: 72,  2: 73,  3: 74},
     }
 
     _CUT_ATTRS = {
@@ -100,7 +100,7 @@ class SoundMode():
             note = MIDI_base
             mode_label = 1
         else:
-            note = MIDI_base + 16
+            note = MIDI_base + 15
             mode_label = 2
 
         # send MIDI and print
