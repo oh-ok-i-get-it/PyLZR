@@ -1,18 +1,24 @@
+# PyLZR.py
+
 import sys
 import numpy as np
 import pyqtgraph as pg
 import pyaudio
-from scipy.fftpack import rfft
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QSlider
 from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, pyqtSlot
+from scipy.fftpack import rfft
 
 import textClass as txt
 import Qtmidi as midi
 import soundModeClass as sm
+from fftWorker import FFTWorker
 
 
 class PyLZR(QWidget):
+    # signal to send waveform buffers to the FFT thread
+    processAudio = pyqtSignal(np.ndarray)
+
     def __init__(self):
         super().__init__()
 
@@ -33,7 +39,7 @@ class PyLZR(QWidget):
         self.init_plot()
         self.init_ui()
 
-        # Now that count_rate is known:
+        # compute derived rates/scales
         self.dm_rate     = self.DM_TIME_RATE / self.count_rate
         self._low_scale  = 1000.0  / self.count_rate
         self._high_scale = 10000.0 / self.count_rate
@@ -55,22 +61,36 @@ class PyLZR(QWidget):
         self._high_acc  = 0.0
         self._frame_cnt = 0
 
-        # — Timer for update loop —
+        # — Set up FFT worker thread —
+        self.fft_thread = QThread(self)
+        self.fft_worker = FFTWorker(
+            sp_scale = self._sp_scale,
+            lo_cut   = self.LOW_C_CUTOFF,
+            med_cut  = self.MED_C_CUTOFF,
+            hi_cut   = self.ALL_C_CUTOFF
+        )
+        self.fft_worker.moveToThread(self.fft_thread)
+        self.fft_thread.start()
+
+        # connect signals to/from worker
+        self.processAudio.connect(self.fft_worker.process, Qt.QueuedConnection)
+        self.fft_worker.resultReady.connect(self._onSpectrumReady)
+
+        # — Timer for the update loop —
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(self.audio_rate)
 
+
     def init_audio(self):
-        # Spectrum-averaging params
         self.count_rate = 20
         self.low_avg    = 0.0
         self.high_avg   = 0.0
 
-        # Preallocate waveform buffer
         self.CHUNK   = 1024 * 2
         self.wf_data = np.empty(self.CHUNK, dtype=np.int16)
 
-        # rfft output length = CHUNK/2+1
+        # rfft length = CHUNK/2+1
         self.LOW_C_CUTOFF  = self.CHUNK // 128
         self.MED_C_CUTOFF  = self.CHUNK // 4
         self.ALL_C_CUTOFF  = self.CHUNK // 2 + 1
@@ -87,7 +107,6 @@ class PyLZR(QWidget):
             frames_per_buffer = self.CHUNK
         )
 
-        # Precompute the frequency axes
         self.x      = np.arange(0, 2*self.CHUNK, 2)
         self.f_low  = np.linspace(0, 44100/128, self.LOW_C_CUTOFF)
         self.f_med  = np.linspace(44100/128, 44100/4,
@@ -95,14 +114,14 @@ class PyLZR(QWidget):
         self.f_high = np.linspace(44100/4, 44100/2,
                                   self.ALL_C_CUTOFF - self.MED_C_CUTOFF)
 
-        self.audio_rate = 10  # ms between frames
+        self.audio_rate = 10  # ms
+
 
     def init_plot(self):
         self.plot_widget = pg.GraphicsLayoutWidget()
         self.plot_widget.resize(1000, 600)
         pg.setConfigOptions(antialias=True)
 
-        # Waveform
         wf_x = pg.AxisItem(orientation='bottom')
         wf_x.setTicks([[(0,'0'),(1024,'1024'),(2048,'2048'),
                         (3072,'3072'),(4096,'4096')]])
@@ -112,12 +131,14 @@ class PyLZR(QWidget):
         self.waveform.setYRange(0,255, padding=0)
         self.waveform.setXRange(0,2*self.CHUNK, padding=0.005)
 
-        # Spectrum
         sp_x = pg.AxisItem(orientation='bottom')
-        sp_x.setTicks([[ 
-            (np.log10(10),'10Hz'), (np.log10(100),'100Hz'),
-            (np.log10(250),'250Hz'),(np.log10(400),'400Hz'),
-            (np.log10(1000),'1kHz'),(np.log10(22050),'22kHz')
+        sp_x.setTicks([[
+            (np.log10(10),'10Hz'),
+            (np.log10(100),'100Hz'),
+            (np.log10(250),'250Hz'),
+            (np.log10(400),'400Hz'),
+            (np.log10(1000),'1kHz'),
+            (np.log10(22050),'22kHz')
         ]])
         self.spectrum = self.plot_widget.addPlot(
             title="SPECTRUM", row=2, col=1, axisItems={'bottom': sp_x}
@@ -127,6 +148,7 @@ class PyLZR(QWidget):
         self.spectrum.setXRange(np.log10(20), np.log10(44100/2), padding=0.005)
 
         self.traces = {}
+
 
     def init_ui(self):
         self.setWindowTitle('PyLZR : SSP3CTRUM')
@@ -149,6 +171,7 @@ class PyLZR(QWidget):
         layout.addWidget(self.plot_widget)
         self.setLayout(layout)
 
+
     def _on_count_rate_change(self, val):
         self.count_rate = val
         self.count_label.setText(f"Avgs Calc Rate: {val}")
@@ -156,11 +179,13 @@ class PyLZR(QWidget):
         self._low_scale  = 1000.0  / val
         self._high_scale = 10000.0 / val
 
+
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
         self.vm.keyboard(key)
         self.key_label.setText(f"Key: {event.text()} (code {key})")
         super().keyPressEvent(event)
+
 
     def update(self):
         try:
@@ -168,46 +193,48 @@ class PyLZR(QWidget):
             audio = np.frombuffer(raw, dtype=np.int16)
             self.wf_data[:] = audio + 127
 
-            # waveform
+            # plot waveform
             if 'waveform' not in self.traces:
                 self.traces['waveform'] = self.waveform.plot(pen='c', width=3)
             self.traces['waveform'].setData(self.x, self.wf_data)
 
-            # spectrum
-            sp = np.abs(rfft(self.wf_data - 128)) * self._sp_scale
-
-            low  = sp[:self.LOW_C_CUTOFF]
-            med  = sp[self.LOW_C_CUTOFF:self.MED_C_CUTOFF]
-            high = sp[self.MED_C_CUTOFF:self.ALL_C_CUTOFF]
-
-            # store for run_sm()
-            self.sp_data_low  = low
-            self.sp_data_high = high
-
-            # batch‐update plots
-            for name,data,axis in (
-                ('spectrum_low',  low,  self.f_low),
-                ('spectrum_med',  med,  self.f_med),
-                ('spectrum_high', high, self.f_high),
-            ):
-                if name not in self.traces:
-                    pen = {'spectrum_low':'y',
-                           'spectrum_med':'b',
-                           'spectrum_high':'m'}[name]
-                    self.traces[name] = self.spectrum.plot(pen=pen, width=3)
-                self.traces[name].setData(axis, data)
-
-            self.key_label.setText(
-                f"Low Avg: {self.low_avg:.6f} | High Avg: {self.high_avg:.6f}"
-            )
-
-            self.run_sm()
+            # hand off FFT work
+            self.processAudio.emit(self.wf_data.copy())
 
         except IOError as e:
             print(f"Audio I/O Error: {e}")
 
+
+    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
+    def _onSpectrumReady(self, low, med, high):
+        # store for SM
+        self.sp_data_low, self.sp_data_med, self.sp_data_high = low, med, high
+
+        # batch‐update spectrum plots
+        for name, data, axis in (
+            ('spectrum_low',  low,  self.f_low),
+            ('spectrum_med',  med,  self.f_med),
+            ('spectrum_high', high, self.f_high),
+        ):
+            if name not in self.traces:
+                pen = {
+                    'spectrum_low':'y',
+                    'spectrum_med':'b',
+                    'spectrum_high':'m'
+                }[name]
+                self.traces[name] = self.spectrum.plot(pen=pen, width=3)
+            self.traces[name].setData(axis, data)
+
+        # in-window label
+        self.key_label.setText(
+            f"Low Avg: {self.low_avg:.6f} | High Avg: {self.high_avg:.6f}"
+        )
+
+        # run mode logic
+        self.run_sm()
+
+
     def run_sm(self):
-        # use the spectral slices now stored on self
         low_mean  = self.sp_data_low.mean()
         high_mean = self.sp_data_high.mean()
 
@@ -222,7 +249,6 @@ class PyLZR(QWidget):
             self._high_acc  = 0.0
             self._frame_cnt = 0
 
-            # dual-mode toggle
             self.dm_count += 1
             if self.dm_count >= self.dm_rate:
                 self.dm_count = 0
