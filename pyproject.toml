@@ -1,0 +1,35 @@
+
+[build-system]
+requires = [
+  "setuptools>=61.0", 
+  "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pylzr"
+version = "0.3.0"
+description = "Sound-reactive DMX laser controller"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+  { name="Hayden", email="hpeery17@gmail.com" }
+]
+
+# Runtime dependencies
+dependencies = [
+  "numpy",
+  "scipy",
+  "rtmidi",
+  "PyQt5",
+  "pyqtgraph",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[project.scripts]
+pylzr = "pylzr.__main__:main"
+
+

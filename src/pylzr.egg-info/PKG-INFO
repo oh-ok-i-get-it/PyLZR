@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: pylzr
+Version: 0.3.0
+Summary: Sound-reactive DMX laser controller
+Author-email: Hayden <hpeery17@gmail.com>
+License: MIT
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: rtmidi
+Requires-Dist: PyQt5
+Requires-Dist: pyqtgraph
