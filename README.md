@@ -102,7 +102,7 @@ Refer to [`requirements.txt`](requirements.txt) for exact versions.
 ## Usage Instructions
 
 - **GUI Sliders:** Adjust spectral frequency cutoff thresholds directly within the GUI.
-- **Sound Mode Toggle:** Activate or deactivate MIDI note triggering based on audio analysis.
+- **Sound Mode Toggle:** Activate or deactivate MIDI note triggering based on audio analysis via [LSHIFT].
 - **Keyboard Controls:** Interact using defined keyboard mappings for MIDI note outputs.
 
 ## Development and Contribution
