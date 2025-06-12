@@ -5,13 +5,13 @@ import pyaudio
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QSlider
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, pyqtSlot, QSignalBlocker
-from scipy.fftpack import rfft
 from collections import deque
 
-import textClass as txt
-import Qtmidi as midi
-import soundModeClass as sm
-from fftWorker import FFTWorker
+# Import local modules
+from . import textClass as txt
+from . import Qtmidi as midi
+from . import soundModeClass as sm
+from . import FFTWorker
 
 # Cutoff Sliders Max Value
 CUTOFF_SLIDER_MAX = 10_000
@@ -22,7 +22,7 @@ class PyLZR(QWidget):
     def __init__(self):
         super().__init__()
 
-        # — SM & Dual-Mode setup —
+        # - SM & Dual-Mode setup -
         self.LOW_QUIET_MODE_CUTOFF   = 100
         self.LOW_MODE1_CUTOFF        = 300
         self.LOW_MODE2_CUTOFF        = 500
@@ -33,12 +33,12 @@ class PyLZR(QWidget):
         self.DM_TIME_RATE = 2400
         self.dm_count     = 0
 
-        # — Audio & plotting setup —
+        # - Audio & plotting setup -
         self.init_audio()
         self.init_plot()
         self.init_ui()
 
-        # — SM block accumulation using deque —
+        # - SM block accumulation using deque -
         self._low_means = deque()
         self._high_means = deque()
         # Precompute per-block scale factors
@@ -50,7 +50,7 @@ class PyLZR(QWidget):
         self.low_avg = 0.0
         self.high_avg = 0.0
 
-        # — MIDI & SoundMode —
+        # - MIDI & SoundMode -
         self.vm = midi.VirtualMIDI()
         self.soundmode = sm.SoundMode(
             self.LOW_QUIET_MODE_CUTOFF,
@@ -62,7 +62,7 @@ class PyLZR(QWidget):
             self.vm
         )
 
-        # — FFT worker thread —
+        # - FFT worker thread -
         self.fft_thread = QThread(self)
         self.fft_worker = FFTWorker(
             sp_scale=self._sp_scale,
@@ -75,7 +75,7 @@ class PyLZR(QWidget):
         self.processAudio.connect(self.fft_worker.process, Qt.QueuedConnection)
         self.fft_worker.resultReady.connect(self._onSpectrumReady)
 
-        # — Timer for update loop —
+        # - Timer for update loop -
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(self.audio_rate)

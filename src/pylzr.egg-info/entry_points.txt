@@ -1,0 +1,2 @@
+[console_scripts]
+pylzr = pylzr.__main__:main

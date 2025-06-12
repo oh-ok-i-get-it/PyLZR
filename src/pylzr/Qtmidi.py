@@ -1,6 +1,6 @@
 import time
 import rtmidi as midi
-import textClass as txt
+from . import textClass as txt
 import threading
 
 class VirtualMIDI():
