@@ -22,7 +22,7 @@ class PyLZR(QWidget):
     def __init__(self):
         super().__init__()
 
-        # - SM & Dual-Mode setup -
+        # SM & Dual-Mode setup 
         self.LOW_QUIET_MODE_CUTOFF   = 100
         self.LOW_MODE1_CUTOFF        = 300
         self.LOW_MODE2_CUTOFF        = 500
@@ -33,24 +33,24 @@ class PyLZR(QWidget):
         self.DM_TIME_RATE = 2400
         self.dm_count     = 0
 
-        # - Audio & plotting setup -
+        # Audio & plotting setup 
         self.init_audio()
         self.init_plot()
         self.init_ui()
 
-        # - SM block accumulation using deque -
+        # SM block accumulation using deque 
         self._low_means = deque()
         self._high_means = deque()
         # Precompute per-block scale factors
         self._low_scale = 1000.0 / self.count_rate
         self._high_scale = 10000.0 / self.count_rate
 
-        # derived DM-toggle rate
+        # DM-toggle rate
         self.dm_rate = self.DM_TIME_RATE / self.count_rate
         self.low_avg = 0.0
         self.high_avg = 0.0
 
-        # - MIDI & SoundMode -
+        # MIDI & SoundMode 
         self.vm = midi.VirtualMIDI()
         self.soundmode = sm.SoundMode(
             self.LOW_QUIET_MODE_CUTOFF,
@@ -62,7 +62,7 @@ class PyLZR(QWidget):
             self.vm
         )
 
-        # - FFT worker thread -
+        # FFT worker thread 
         self.fft_thread = QThread(self)
         self.fft_worker = FFTWorker(
             sp_scale=self._sp_scale,
@@ -75,7 +75,7 @@ class PyLZR(QWidget):
         self.processAudio.connect(self.fft_worker.process, Qt.QueuedConnection)
         self.fft_worker.resultReady.connect(self._onSpectrumReady)
 
-        # - Timer for update loop -
+        # Timer for update loop 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(self.audio_rate)
@@ -102,19 +102,19 @@ class PyLZR(QWidget):
         self.f_low = np.linspace(0, 44100/128, self.LOW_C_CUTOFF)
         self.f_med = np.linspace(44100/128, 44100/4, self.MED_C_CUTOFF-self.LOW_C_CUTOFF)
         self.f_high = np.linspace(44100/4, 44100/2, self.ALL_C_CUTOFF-self.MED_C_CUTOFF)
-        # timer interval
+        # Timer interval
         self.audio_rate = int(self.CHUNK/44100*1000)
 
     def init_plot(self):
         self.plot_widget = pg.GraphicsLayoutWidget()
         pg.setConfigOptions(antialias=True)
-        # waveform
+        # Waveform
         wf_x = pg.AxisItem(orientation='bottom')
         wf_x.setTicks([[(0,'0'),(1024,'1024'),(2048,'2048'),(3072,'3072'),(4096,'4096')]])
         self.waveform = self.plot_widget.addPlot(title='WAVEFORM',row=1,col=1,axisItems={'bottom':wf_x})
         self.waveform.setYRange(0,255,padding=0)
         self.waveform.setXRange(0,2*self.CHUNK,padding=0.005)
-        # spectrum
+        # Spectrum
         sp_x = pg.AxisItem(orientation='bottom')
         sp_x.setTicks([[(np.log10(10),'10Hz'),(np.log10(100),'100Hz'),(np.log10(250),'250Hz'),
                         (np.log10(400),'400Hz'),(np.log10(1000),'1kHz'),(np.log10(22050),'22kHz')]])
@@ -130,7 +130,7 @@ class PyLZR(QWidget):
         self.setWindowTitle('PyLZR : SSP3CTRUM')
         self.setGeometry(100,100,1200,800)
         layout=QVBoxLayout()
-        # avg-rate slider
+        # Avg-rate slider
         self.count_slider=QSlider(Qt.Horizontal,self)
         self.count_slider.setRange(10,50)
         self.count_slider.setValue(self.count_rate)
@@ -140,7 +140,7 @@ class PyLZR(QWidget):
         self.count_label=QLabel(f'Avgs Calc Rate: {self.count_rate}',self)
         layout.addWidget(self.count_slider)
         layout.addWidget(self.count_label)
-        # low-mode sliders
+        # Low-mode sliders
         for mode in range(3):
             lbl=QLabel(self)
             init=[self.LOW_QUIET_MODE_CUTOFF,self.LOW_MODE1_CUTOFF,self.LOW_MODE2_CUTOFF][mode]
@@ -150,7 +150,7 @@ class PyLZR(QWidget):
             sld.valueChanged.connect(lambda v,m=mode,sl=sld:self._on_low_cutoff_change(v,m,sl))
             layout.addWidget(lbl);layout.addWidget(sld)
             setattr(self,f'low_{mode}_label',lbl)
-        # high-mode sliders
+        # High-mode sliders
         for mode in range(3):
             lbl=QLabel(self)
             init=[self.HIGH_QUIET_MODE_CUTOFF,self.HIGH_MODE1_CUTOFF,self.HIGH_MODE2_CUTOFF][mode]
@@ -160,7 +160,7 @@ class PyLZR(QWidget):
             sld.valueChanged.connect(lambda v,m=mode,sl=sld:self._on_high_cutoff_change(v,m,sl))
             layout.addWidget(lbl);layout.addWidget(sld)
             setattr(self,f'high_{mode}_label',lbl)
-        # key label + plot
+        # Key label + plot
         self.key_label=QLabel('Press any key',self)
         layout.addWidget(self.key_label)
         layout.addWidget(self.plot_widget)
@@ -229,7 +229,7 @@ class PyLZR(QWidget):
             self.dm_count=(self.dm_count+1)%int(self.dm_rate)
             if self.vm.sm_ON: self.soundmode.check_mode(self.low_avg,self.high_avg)
             print(f"{txt.YELLOW}{txt.I}LOW: {txt.IOFF}{txt.B}{self.low_avg:.2f}{txt.BOFF}\t"+ 
-                  f"{txt.PURPLE}{txt.I}HIGH: {txt.IOFF}{txt.B}{self.high_avg:.2f}{txt.BOFF}")
+                  f"{txt.PURPLE}{txt.I}HIGH: {txt.IOFF}{txt.B}{self.high_avg:.2f}{txt.RESET}")
             print(f"DM COUNT: {self.dm_count}   DM RATE: {self.dm_rate}")
             print(f"DM ON?: {self.soundmode.get_dm_mode_bool()}")
             self.key_label.setText(f"Low Avg: {self.low_avg:.6f} | High Avg: {self.high_avg:.6f}")

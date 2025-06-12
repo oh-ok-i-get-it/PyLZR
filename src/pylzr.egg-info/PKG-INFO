@@ -10,6 +10,7 @@ Requires-Dist: scipy
 Requires-Dist: rtmidi
 Requires-Dist: PyQt5
 Requires-Dist: pyqtgraph
+Requires-Dist: PyAudio
 
 # PyLZR
 

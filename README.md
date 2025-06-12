@@ -1,88 +1,120 @@
+
 # PyLZR
 
 **Version:** 0.3.0
 
-A sound-reactive DMX laser light controller built in Python and PyQt5. PyLZR analyzes live audio input in real time, computes spectral bands via FFT, and drives a DMX-compatible laser rig over MIDI, with customizable sound modes.
+PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging PyQt5 for the GUI, NumPy and SciPy for FFT audio processing, and MIDI output via `python-rtmidi`. PyLZR reacts in real-time to audio input, converting sound frequencies into MIDI commands to control DMX-compatible laser systems.
 
 ## Features
 
-- **Real-time audio capture & FFT** using PyAudio and NumPy/Scipy
-- **Live plotting** of waveform and spectrum via PyQtGraph
-- **MIDI output** for DMX control through `python-rtmidi` (`MidiOut`, `VirtualMIDI`)
-- **Sound modes**: discrete low/high spectral thresholds trigger different MIDI notes
-- **Dual-mode toggle** for alternate DMX behavior
-- **Console & module entry points**: `python -m pylzr` or shell-command `pylzr` (via `__main__.py`)
+- **Real-time audio input and FFT analysis** using PyAudio, NumPy, and SciPy.
+- **Dynamic GUI** with waveform and spectrum visualization powered by PyQtGraph.
+- **Real-time MIDI output** to control DMX devices via virtual or hardware MIDI ports.
+- **Customizable spectral threshold sliders** to fine-tune audio responsiveness.
+- **Dual-mode functionality** for varied DMX outputs.
 
 ## Project Structure
 
 ```
-project-root/
-├── pyproject.toml       # Build system & dependencies
+pylzr/
+├── pyproject.toml           # Build and project metadata
+├── requirements.txt         # Project dependencies
+├── run.sh                   # Automated setup and launch script
 ├── src/
-│   └── pylzr/           # Package namespace
-│       ├── __init__.py  # Version & public API exports
-│       ├── __main__.py  # Entry point for `python -m pylzr`
-│       ├── PyLZR.py     # Main Qt GUI & audio loop
-│       ├── Qtmidi.py    # MIDI output wrapper
-│       ├── soundModeClass.py # Sound mode logic
-│       ├── fftWorker.py # FFT processing in worker thread
-│       └── textClass.py # Terminal text styling constants
+│   └── pylzr/
+│       ├── __init__.py      # Package initialization
+│       ├── __main__.py      # Entry point for console
+│       ├── PyLZR.py         # Main GUI and audio processing
+│       ├── Qtmidi.py        # MIDI interface and event handling
+│       ├── soundModeClass.py# Sound-reactive modes and MIDI mapping
+│       ├── fftWorker.py     # FFT calculations in worker threads
+│       └── textClass.py     # ANSI color codes for terminal output
 └── README.md
 ```
 
-## Installation
+## Installation and Usage
 
-1. **Clone the repository**
+### Automated Setup (Recommended)
+
+A bash script simplifies setup and launch:
+
+```bash
+./run.sh
+```
+
+This script will:
+- Create and activate a virtual environment (`.venv`)
+- Upgrade `pip`, `setuptools`, and `wheel`
+- Install required dependencies
+- Install PyLZR in editable mode
+- Launch the application
+
+### Manual Setup
+
+1. **Clone Repository:**
    ```bash
    git clone https://github.com/yourusername/pylzr.git
    cd pylzr
    ```
-2. **Create & activate a virtual environment**
+
+2. **Set up Python Virtual Environment:**
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
    ```
-3. **Install in editable mode** (pulls in runtime dependencies)
+
+3. **Install Dependencies:**
+   ```bash
+   pip install --upgrade pip setuptools wheel
+   pip install -r requirements.txt
+   ```
+
+4. **Install PyLZR:**
    ```bash
    pip install -e .
    ```
 
-> **Dependencies** (automatically installed):
-> - Python 3.8+
-> - PyQt5
-> - PyAudio
-> - numpy, scipy
-> - pyqtgraph
-> - python-rtmidi
+### Launch PyLZR
 
-## Usage
-
-- **Run via module**
+- **Via Module:**
   ```bash
   python -m pylzr
   ```
 
-- **Run via console script**
+- **Via Console Command:**
   ```bash
   pylzr
   ```
 
-Once launched, PyLZR will open a GUI window showing both the waveform and logarithmic spectrum. Press keyboard keys to send MIDI notes; toggle sound-reactive mode with the dedicated shortcut.
+## Dependencies
 
-## Configuration
+PyLZR requires:
+- Python 3.8+
+- NumPy
+- SciPy
+- PyAudio
+- PyQt5
+- pyqtgraph
+- python-rtmidi
 
-- **Cutoff sliders**: adjust low/high thresholds in the GUI to customize spectral triggers.
-- **Sound modes**: assign MIDI notes in `soundModeClass.py`’s `MODE_MAP`.
+Refer to [`requirements.txt`](requirements.txt) for exact versions.
 
-## Contributing
+## Usage Instructions
 
-1. Fork the repository  
-2. Create a new branch (`git checkout -b feature/foo`)  
-3. Make your changes & write tests  
-4. Submit a pull request  
+- **GUI Sliders:** Adjust spectral frequency cutoff thresholds directly within the GUI.
+- **Sound Mode Toggle:** Activate or deactivate MIDI note triggering based on audio analysis.
+- **Keyboard Controls:** Interact using defined keyboard mappings for MIDI note outputs.
 
-Please follow the existing code style and include descriptive commit messages.
+## Development and Contribution
+
+1. Fork the project repository.
+2. Create your feature branch (`git checkout -b feature/your-feature`).
+3. Commit changes (`git commit -am 'Add some feature'`).
+4. Push to your branch (`git push origin feature/your-feature`).
+5. Open a Pull Request.
+
+Ensure adherence to the existing coding style and provide meaningful commit messages.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+PyLZR is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.

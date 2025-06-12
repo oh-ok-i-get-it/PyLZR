@@ -23,6 +23,7 @@ dependencies = [
   "rtmidi",
   "PyQt5",
   "pyqtgraph",
+  "PyAudio",
 ]
 
 [tool.setuptools.packages.find]
