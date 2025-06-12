@@ -6,7 +6,6 @@ __pycache__/
 
 # Ignore venv
 .venv/
-venv/
-env/
+
 
 
