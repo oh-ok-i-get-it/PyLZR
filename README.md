@@ -1,0 +1,88 @@
+# PyLZR
+
+**Version:** 0.3.0
+
+A sound-reactive DMX laser light controller built in Python and PyQt5. PyLZR analyzes live audio input in real time, computes spectral bands via FFT, and drives a DMX-compatible laser rig over MIDI, with customizable sound modes.
+
+## Features
+
+- **Real-time audio capture & FFT** using PyAudio and NumPy/Scipy
+- **Live plotting** of waveform and spectrum via PyQtGraph
+- **MIDI output** for DMX control through `python-rtmidi` (`MidiOut`, `VirtualMIDI`)
+- **Sound modes**: discrete low/high spectral thresholds trigger different MIDI notes
+- **Dual-mode toggle** for alternate DMX behavior
+- **Console & module entry points**: `python -m pylzr` or shell-command `pylzr` (via `__main__.py`)
+
+## Project Structure
+
+```
+project-root/
+├── pyproject.toml       # Build system & dependencies
+├── src/
+│   └── pylzr/           # Package namespace
+│       ├── __init__.py  # Version & public API exports
+│       ├── __main__.py  # Entry point for `python -m pylzr`
+│       ├── PyLZR.py     # Main Qt GUI & audio loop
+│       ├── Qtmidi.py    # MIDI output wrapper
+│       ├── soundModeClass.py # Sound mode logic
+│       ├── fftWorker.py # FFT processing in worker thread
+│       └── textClass.py # Terminal text styling constants
+└── README.md
+```
+
+## Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/pylzr.git
+   cd pylzr
+   ```
+2. **Create & activate a virtual environment**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+3. **Install in editable mode** (pulls in runtime dependencies)
+   ```bash
+   pip install -e .
+   ```
+
+> **Dependencies** (automatically installed):
+> - Python 3.8+
+> - PyQt5
+> - PyAudio
+> - numpy, scipy
+> - pyqtgraph
+> - python-rtmidi
+
+## Usage
+
+- **Run via module**
+  ```bash
+  python -m pylzr
+  ```
+
+- **Run via console script**
+  ```bash
+  pylzr
+  ```
+
+Once launched, PyLZR will open a GUI window showing both the waveform and logarithmic spectrum. Press keyboard keys to send MIDI notes; toggle sound-reactive mode with the dedicated shortcut.
+
+## Configuration
+
+- **Cutoff sliders**: adjust low/high thresholds in the GUI to customize spectral triggers.
+- **Sound modes**: assign MIDI notes in `soundModeClass.py`’s `MODE_MAP`.
+
+## Contributing
+
+1. Fork the repository  
+2. Create a new branch (`git checkout -b feature/foo`)  
+3. Make your changes & write tests  
+4. Submit a pull request  
+
+Please follow the existing code style and include descriptive commit messages.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
