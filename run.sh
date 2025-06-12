@@ -55,4 +55,12 @@ color_print "$GREEN${BOLD}" "PyLZR installed successfully.\n"
 
 # Launch 
 color_print "\n${MAGENTA}${BOLD}${ITALICS}" "Launching ${CYAN}${ITALICS_OFF}PyLZR...\n"
-exec pylzr "$@"
+
+if command -v pylzr &> /dev/null; then
+    color_print "$GREEN${BOLD}" "${ITALICS}pylzr ${ITALICS_OFF}${YELLOW}command found - running installed entry-point. \n\tProceeding to execute...\n"
+    exec pylzr "$@"
+else
+    color_print "$RED${BOLD}" "${ITALICS}pylzr ${ITALICS_OFF}${YELLOW}command not found - running module directly. \n\tProceeding to execute...\n"
+    exec -m pylzr "$@"
+fi
+
