@@ -1,4 +1,4 @@
-from . import textClass as txt
+from ..utils import text_styles as txt
 from bisect import bisect_right
 
 class SoundMode():

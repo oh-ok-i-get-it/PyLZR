@@ -8,10 +8,11 @@ from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, pyqtSlot, QSignalBlock
 from collections import deque
 
 # Import local modules
-from . import textClass as txt
-from . import Qtmidi as midi
-from . import soundModeClass as sm
-from . import FFTWorker
+from ..utils import text_styles as txt
+from ..midi import VirtualMIDI #as vmidi
+#from ..modes import SoundMode as sm, set_cutoff
+from ..modes import SoundMode, set_cutoff
+from ..audio import AudioInput, FFTWorker
 
 # Cutoff Sliders Max Value
 CUTOFF_SLIDER_MAX = 10_000
@@ -51,8 +52,9 @@ class PyLZR(QWidget):
         self.high_avg = 0.0
 
         # MIDI & SoundMode 
-        self.vm = midi.VirtualMIDI()
-        self.soundmode = sm.SoundMode(
+        #self.vm = vmidi.VirtualMIDI()
+        self.vm = VirtualMIDI()
+        self.soundmode = SoundMode(
             self.LOW_QUIET_MODE_CUTOFF,
             self.LOW_MODE1_CUTOFF,
             self.LOW_MODE2_CUTOFF,
@@ -178,7 +180,7 @@ class PyLZR(QWidget):
         if slider.value()!=val:
             with QSignalBlocker(slider): slider.setValue(val)
         setattr(self,['LOW_QUIET_MODE_CUTOFF','LOW_MODE1_CUTOFF','LOW_MODE2_CUTOFF'][mode],val)
-        sm.set_cutoff(self.soundmode,val,mode,high=False)
+        set_cutoff(self.soundmode,val,mode,high=False)
         lbl=getattr(self,f'low_{mode}_label');lbl.setText(f"Low {'Quiet' if mode==0 else f'Mode{mode}'} Cutoff: {val}")
 
     def _on_high_cutoff_change(self,val,mode,slider):
@@ -188,7 +190,7 @@ class PyLZR(QWidget):
         if slider.value()!=val:
             with QSignalBlocker(slider): slider.setValue(val)
         setattr(self,['HIGH_QUIET_MODE_CUTOFF','HIGH_MODE1_CUTOFF','HIGH_MODE2_CUTOFF'][mode],val)
-        sm.set_cutoff(self.soundmode,val,mode,high=True)
+        set_cutoff(self.soundmode,val,mode,high=True)
         lbl=getattr(self,f'high_{mode}_label');lbl.setText(f"High {'Quiet' if mode==0 else f'Mode{mode}'} Cutoff: {val}")
 
     def keyPressEvent(self,event:QKeyEvent):
