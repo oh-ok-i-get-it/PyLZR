@@ -1,3 +1,4 @@
+README.md
 README.txt
 pyproject.toml
 src/pylzr/PyLZR.py
