@@ -20,16 +20,30 @@ color_print() {
   printf "%b\n" "${color}$*${RESET}"
 }
 
-# Hash a file using Python (cross-platform, always available)
+# Hash a file using Python (cross-platform; `python` always exists inside the venv)
 file_hash() {
-  python3 -c "import hashlib; print(hashlib.sha256(open('$1','rb').read()).hexdigest())"
+  python -c "import hashlib; print(hashlib.sha256(open('$1','rb').read()).hexdigest())"
 }
+
+# Find a working system Python. Windows usually has `python` rather than
+# `python3`, and may have a non-functional `python3` Store alias — so test each.
+PY=""
+for candidate in python3 python; do
+    if "$candidate" -c "import sys" &> /dev/null; then
+        PY="$candidate"
+        break
+    fi
+done
+if [ -z "$PY" ]; then
+    color_print "$RED${BOLD}" "No working python3/python found on PATH."
+    exit 1
+fi
 
 # Create the venv if needed
 VENV_IS_NEW=false
 if [ ! -d ".venv" ]; then
     color_print "$BLUE${BOLD}${ITALICS}" "Creating virtual environment..."
-    python3 -m venv .venv
+    "$PY" -m venv .venv
     color_print "$GREEN${BOLD}" "Virtual environment created successfully.\n"
     VENV_IS_NEW=true
 else
@@ -38,7 +52,12 @@ fi
 
 # Activate venv
 color_print "$BLUE${BOLD}${ITALICS}" "Activating virtual environment..."
-source .venv/bin/activate
+# venv layout differs: bin/ on macOS/Linux, Scripts/ on Windows (Git Bash)
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+else
+    source .venv/Scripts/activate
+fi
 color_print "$GREEN${BOLD}" "Virtual environment activated successfully.\n"
 
 
@@ -84,5 +103,5 @@ if command -v pylzr &> /dev/null; then
     exec pylzr "$@"
 else
     color_print "$RED${BOLD}" "${ITALICS}pylzr ${ITALICS_OFF}${YELLOW}command not found - running module directly. \n\tProceeding to execute...\n"
-    exec python3 -m pylzr "$@"
+    exec python -m pylzr "$@"
 fi

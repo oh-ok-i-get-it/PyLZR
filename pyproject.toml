@@ -20,7 +20,7 @@ authors = [
 dependencies = [
   "numpy",
   "scipy",
-  "rtmidi",
+  "python-rtmidi",
   "PyQt5",
   "pyqtgraph",
   "PyAudio",

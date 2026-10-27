@@ -35,6 +35,10 @@ class PyLZR(QWidget):
         self.setWindowTitle('PyLZR : SSP3CTRUM')
         self.setGeometry(100, 100, WINDOW_W, WINDOW_H)
 
+        # Logger → log panel, connected first so subsystem startup messages show
+        self.log_panel = LogPanel()
+        logger.message_logged.connect(self.log_panel.append_message)
+
         # Subsystems
         self.audio     = AudioInput()
         self.midi_out  = MIDIOutput()
@@ -50,7 +54,6 @@ class PyLZR(QWidget):
         # GUI panels
         self.spectrum_widget = SpectrumWidget(self.audio)
         self.controls        = ControlPanel()
-        self.log_panel       = LogPanel()
         self.avg_panel       = AvgPanel()
 
         bottom_row = QHBoxLayout()
@@ -69,14 +72,11 @@ class PyLZR(QWidget):
 
         # Populate settings panel with live subsystem data
         self.settings_panel.set_audio_status(True, self.audio.device_name)
-        self.settings_panel.set_midi_status(True, self.midi_out.port_name)
+        self._refresh_midi_ports()
         self.settings_panel.set_dmx_status()
         self.settings_panel.set_audio_devices(
             self.audio.get_input_devices(), self.audio.device_index
         )
-
-        # Logger → log panel
-        logger.message_logged.connect(self.log_panel.append_message)
 
         # Control panel → subsystem wiring
         self.controls.count_rate_changed.connect(self._on_count_rate)
@@ -88,6 +88,7 @@ class PyLZR(QWidget):
         # Settings panel → subsystem wiring
         self.settings_panel.audio_device_changed.connect(self._on_audio_device_changed)
         self.settings_panel.audio_gain_changed.connect(self._on_gain_changed)
+        self.settings_panel.midi_port_changed.connect(self._on_midi_port_changed)
         self.settings_panel.fft_window_changed.connect(self._on_fft_window_changed)
         self.settings_panel.smoothing_changed.connect(self._on_smoothing_changed)
         self.settings_panel.log_level_changed.connect(self._on_log_level_changed)
@@ -221,6 +222,7 @@ class PyLZR(QWidget):
     def _toggle_settings(self):
         visible = not self.settings_panel.isVisible()
         if visible:
+            self._refresh_midi_ports()
             gear = self.controls._gear_btn
             br = gear.mapTo(self, QPoint(gear.width(), gear.height()))
             pw = self.settings_panel.width()
@@ -249,6 +251,17 @@ class PyLZR(QWidget):
 
     def _on_gain_changed(self, gain: float):
         self._audio_gain = gain
+
+    def _refresh_midi_ports(self):
+        # Retry the default port while disconnected, e.g. loopMIDI started after PyLZR
+        if not self.midi_out.connected:
+            self.midi_out.open(self.midi_out.default_port())
+        self.settings_panel.set_midi_ports(self.midi_out.list_ports(), self.midi_out.port_label)
+        self.settings_panel.set_midi_status(self.midi_out.connected, self.midi_out.port_name)
+
+    def _on_midi_port_changed(self, label: str):
+        self.midi_out.open(label)
+        self._refresh_midi_ports()
 
     def _on_fft_window_changed(self, name: str):
         # set_window runs directly — single-frame transition artefact is imperceptible
@@ -292,6 +305,7 @@ class PyLZR(QWidget):
         self._diag_timer.stop()
         self.timer.stop()
         self.audio.close()
+        self.midi_out.close()
         self.fft_thread.quit()
         self.fft_thread.wait()
         super().closeEvent(event)
