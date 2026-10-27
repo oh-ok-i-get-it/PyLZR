@@ -138,6 +138,16 @@ def _labeled_control(label_text: str, readout: QLabel | None,
     return v
 
 
+def _fill_combo(combo: QComboBox, labels: list[str], selected_row: int):
+    """Replace combo items (long names truncated) without emitting signals."""
+    combo.blockSignals(True)
+    combo.clear()
+    for name in labels:
+        combo.addItem(name if len(name) <= 32 else name[:30] + '…')
+    combo.setCurrentIndex(selected_row)
+    combo.blockSignals(False)
+
+
 # ── Main class ────────────────────────────────────────────────────────────────
 
 class SettingsPanel(QWidget):
@@ -149,6 +159,7 @@ class SettingsPanel(QWidget):
     Signals:
         audio_device_changed(int)  — PyAudio device index
         audio_gain_changed(float)  — 0.25 – 4.0
+        midi_port_changed(str)     — port label from MIDIOutput.list_ports()
         fft_window_changed(str)    — 'rectangle' | 'hann' | 'hamming' | 'blackman'
         smoothing_changed(float)   — 0.0 – 0.9
         log_level_changed(str)     — 'debug' | 'info' | 'quiet'
@@ -158,6 +169,7 @@ class SettingsPanel(QWidget):
 
     audio_device_changed = pyqtSignal(int)
     audio_gain_changed   = pyqtSignal(float)
+    midi_port_changed    = pyqtSignal(str)
     fft_window_changed   = pyqtSignal(str)
     smoothing_changed    = pyqtSignal(float)
     log_level_changed    = pyqtSignal(str)
@@ -171,6 +183,7 @@ class SettingsPanel(QWidget):
         self.setStyleSheet(_PANEL_STYLE)
         self.setFixedWidth(_W)
         self._device_list: list[tuple[int, str]] = []
+        self._midi_ports:  list[str] = []
         self._build()
         self.adjustSize()
 
@@ -324,6 +337,13 @@ class SettingsPanel(QWidget):
 
         v.addWidget(_section('APP'))
 
+        # MIDI output port dropdown
+        self._midi_combo = QComboBox()
+        self._midi_combo.setStyleSheet(_COMBO_STYLE)
+        self._midi_combo.setPlaceholderText('No MIDI ports')
+        self._midi_combo.currentIndexChanged.connect(self._on_midi_port_changed)
+        v.addLayout(_labeled_control('MIDI Out', None, self._midi_combo))
+
         # Control Mode dropdown
         self._mode_combo = QComboBox()
         self._mode_combo.setStyleSheet(_COMBO_STYLE)
@@ -397,16 +417,14 @@ class SettingsPanel(QWidget):
 
     def set_audio_devices(self, devices: list[tuple[int, str]], current_index: int):
         self._device_list = devices
-        self._device_combo.blockSignals(True)
-        self._device_combo.clear()
-        selected = 0
-        for row, (idx, name) in enumerate(devices):
-            label = name if len(name) <= 32 else name[:30] + '…'
-            self._device_combo.addItem(label)
-            if idx == current_index:
-                selected = row
-        self._device_combo.setCurrentIndex(selected)
-        self._device_combo.blockSignals(False)
+        selected = next((row for row, (idx, _) in enumerate(devices) if idx == current_index), 0)
+        _fill_combo(self._device_combo, [name for _, name in devices], selected)
+
+    def set_midi_ports(self, ports: list[str], current: str | None):
+        """current=None leaves nothing selected (no port open)."""
+        self._midi_ports = ports
+        selected = ports.index(current) if current in ports else -1
+        _fill_combo(self._midi_combo, ports, selected)
 
     def set_level(self, peak: float, clipping: bool = False):
         self._level_bar.setValue(int(peak * 100))
@@ -427,6 +445,10 @@ class SettingsPanel(QWidget):
     def _on_device_changed(self, row: int):
         if 0 <= row < len(self._device_list):
             self.audio_device_changed.emit(self._device_list[row][0])
+
+    def _on_midi_port_changed(self, row: int):
+        if 0 <= row < len(self._midi_ports):
+            self.midi_port_changed.emit(self._midi_ports[row])
 
     def _on_gain_changed(self, val: int):
         self._gain_readout.setText(f'{val}%')
