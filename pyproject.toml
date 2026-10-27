@@ -26,6 +26,13 @@ dependencies = [
   "PyAudio",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]     # run tests without installing the package
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

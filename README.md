@@ -135,6 +135,17 @@ Refer to [`requirements.txt`](requirements.txt) for exact versions.
 
 Ensure adherence to the existing coding style and provide meaningful commit messages.
 
+### Running Tests
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+The tests replace audio and MIDI with in-memory fakes and run Qt offscreen, so they need no microphone, MIDI port or display, and they behave the same on every OS. GitHub Actions runs them on Windows, macOS and Linux for every push.
+
+`tests/test_pipeline_golden.py` feeds fixed synthetic audio through the whole app and compares every FFT frame, average and MIDI note with `tests/golden/pipeline.json`. If a change is *meant* to alter that output, regenerate the file with `PYLZR_UPDATE_GOLDEN=1 pytest tests/test_pipeline_golden.py` and review its diff.
+
 ## Creator's Commentary
 
 Please note that this is a continuous work in progress. Multiple expanded functionalities including a more dynamically sound-reactive mode via OLA, custom user-created fixture profiles support, etc are currently in development. In addition, a C++ version is also in early development. I am currently working on finalizing support for Windows as well. 
