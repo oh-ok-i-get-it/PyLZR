@@ -1,7 +1,7 @@
 
 # PyLZR
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging PyQt5 for the GUI, NumPy for FFT audio processing, and MIDI output via `python-rtmidi`. PyLZR reacts in real-time to audio input, converting sound frequencies into MIDI commands to control DMX-compatible laser systems.
 
