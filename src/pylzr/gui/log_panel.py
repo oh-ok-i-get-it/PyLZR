@@ -1,14 +1,40 @@
+import logging
 from collections import deque
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextBlockFormat, QTextCursor
 from . import theme
+from ..core.app_logger import DATE_FORMAT, LEVELS, LOG_FORMAT, tone_of
 
 _BG_STYLE = 'QTextEdit {{ background-color: #1a1a1a; color: {fg}; border: 1px solid #333; }}'
 _DEFAULT_FG = '#d4d4d4'
 
 _MAX_LOG_LINES = 2000   # oldest console lines are dropped beyond this
 _AVG_ROWS      = 10
+
+
+def _record_color(record: logging.LogRecord) -> str:
+    """A tagged tone wins; otherwise colour by level ('' = default text)."""
+    return theme.LOG_TONES.get(tone_of(record)) or theme.LOG_LEVELS.get(record.levelno, '')
+
+
+class _LogHandler(logging.Handler):
+    """Formats records and hands them to the panel through a Qt signal, so
+    logging from any thread is delivered on the GUI thread."""
+
+    class _Bridge(QObject):
+        formatted = pyqtSignal(str, str)   # (text, hex color)
+
+    def __init__(self):
+        super().__init__(level=logging.INFO)   # matches the Settings panel default
+        self.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
+        self.bridge = self._Bridge()
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            self.bridge.formatted.emit(self.format(record), _record_color(record))
+        except Exception:
+            self.handleError(record)
 
 
 def _base_text_widget(height: int) -> QTextEdit:
@@ -22,7 +48,11 @@ def _base_text_widget(height: int) -> QTextEdit:
 
 
 class LogPanel(QWidget):
-    """In-app console displaying messages emitted by AppLogger."""
+    """In-app console for the app's log.
+
+    Attach `log_handler` to the 'pylzr' logger to show its records here;
+    set_level() filters what is shown ('debug' | 'info' | 'quiet').
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,6 +65,12 @@ class LogPanel(QWidget):
         self._text.document().setMaximumBlockCount(_MAX_LOG_LINES)
         layout.addWidget(self._text)
         self.setLayout(layout)
+
+        self.log_handler = _LogHandler()
+        self.log_handler.bridge.formatted.connect(self.append_message)
+
+    def set_level(self, level: str):
+        self.log_handler.setLevel(LEVELS[level])
 
     @pyqtSlot(str, str)
     def append_message(self, text: str, color: str):

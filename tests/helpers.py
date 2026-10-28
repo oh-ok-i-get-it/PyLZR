@@ -56,14 +56,14 @@ def wait_for_note_offs():
 
 
 class WindowHarness:
-    """Drives a real PyLZR main window with fake audio and records its output.
+    """Drives a real main window with fake audio and records its output.
 
-    This is the ONLY place the tests reach into main-window internals
-    (the audio timer and per-frame update). When a refactor moves the audio
-    loop, update this class — the tests that use it should not need to change.
+    This is the ONLY place the tests reach into the window's internals (its
+    AudioEngine). When a refactor moves the pipeline, update this class —
+    the tests that use it should not need to change.
 
     Recorded output:
-      frames   — (low.sum, med.sum, high.sum) for every FFT frame displayed
+      frames   — (low.sum, med.sum, high.sum) of every raw FFT frame
       averages — (low_avg, high_avg) for every completed averaging window
     MIDI output is recorded by the fake rtmidi module (fake_rtmidi.sent).
     """
@@ -74,47 +74,30 @@ class WindowHarness:
         self.frames: list[tuple[float, float, float]] = []
         self.averages: list[tuple[float, float]] = []
 
-        # Tests feed audio explicitly instead of on the real-time timer
-        window.timer.stop()
-
-        spectrum = window.spectrum_widget
-        show_spectrum = spectrum.update_spectrum
-
-        def record_frame(low, med, high):
-            self.frames.append((float(low.sum()), float(med.sum()), float(high.sum())))
-            show_spectrum(low, med, high)
-        spectrum.update_spectrum = record_frame
-
-        avg_panel = window.avg_panel
-        show_avgs = avg_panel.append_avgs
-
-        def record_avgs(low_avg, high_avg):
-            self.averages.append((float(low_avg), float(high_avg)))
-            show_avgs(low_avg, high_avg)
-        avg_panel.append_avgs = record_avgs
+        engine = window.engine
+        engine.stop()     # tests feed audio explicitly instead of in real time
+        engine.spectrum_ready.connect(
+            lambda low, med, high: self.frames.append((float(low.sum()), float(med.sum()), float(high.sum()))))
+        engine.averages_ready.connect(
+            lambda low_avg, high_avg: self.averages.append((float(low_avg), float(high_avg))))
 
     def feed(self, chunks):
-        """Run each int16 chunk through the audio loop and wait for its FFT frame."""
-        self.window.timer.stop()    # an audio device switch restarts it
+        """Run each int16 chunk through the pipeline and wait for its FFT frame."""
+        engine = self.window.engine
+        engine.stop()
         target = len(self.frames) + len(chunks)
         for chunk in chunks:
             fake_pyaudio.queue.append(np.asarray(chunk, dtype=np.int16).tobytes())
-            self.window._update()
+            engine.tick()
         wait_until(lambda: len(self.frames) >= target)
 
     def key(self, qt_key):
         QTest.keyClick(self.window, qt_key)
 
     def close(self):
-        """Close the window (runs its closeEvent) and detach it from the
-        global logger so later tests never log into a deleted panel."""
-        from pylzr.core.app_logger import logger
+        """Close the window (runs its closeEvent) and schedule its deletion."""
         if self.closed:
             return
         self.closed = True
         self.window.close()
-        try:
-            logger.message_logged.disconnect(self.window.log_panel.append_message)
-        except TypeError:
-            pass
         self.window.deleteLater()

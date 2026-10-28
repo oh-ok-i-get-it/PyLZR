@@ -1,19 +1,15 @@
 import numpy as np
 import pytest
 
-from pylzr.analysis import FFTWorker
-from pylzr.audio import AudioInput
-from pylzr.core import CHUNK
+from pylzr.analysis import BandLayout, FFTWorker
+from pylzr.core import CHUNK, SAMPLE_RATE
 
 from helpers import tone_chunks
 
 
 def make_worker():
     """Single construction point — update here if the constructor changes."""
-    audio = AudioInput()
-    worker = FFTWorker(sp_scale=audio.sp_scale, lo_cut=audio.lo_cut,
-                       med_cut=audio.med_cut, hi_cut=audio.hi_cut, chunk=audio.chunk)
-    audio.close()
+    worker = FFTWorker(BandLayout(CHUNK, SAMPLE_RATE))
     results = []
     worker.resultReady.connect(lambda low, med, high: results.append((low, med, high)))
     return worker, results

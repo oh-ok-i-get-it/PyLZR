@@ -28,16 +28,16 @@ class ControlPanel(QWidget):
     direct references to them.
     """
 
-    count_rate_changed  = pyqtSignal(int)
-    low_cutoff_changed  = pyqtSignal(int, int)  # (mode_index, value)
-    high_cutoff_changed = pyqtSignal(int, int)  # (mode_index, value)
+    count_rate_changed = pyqtSignal(int)
+    cutoff_changed     = pyqtSignal(str, int, int)  # (band 'low'|'high', mode_index, value)
     sound_mode_toggled  = pyqtSignal()
     settings_toggled    = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._low_cutoffs  = list(DEFAULT_LOW_THRESHOLDS)
-        self._high_cutoffs = list(DEFAULT_HIGH_THRESHOLDS)
+        self._cutoffs = {'low': list(DEFAULT_LOW_THRESHOLDS), 'high': list(DEFAULT_HIGH_THRESHOLDS)}
+        self._cutoff_sliders: dict[str, list[QSlider]] = {'low': [], 'high': []}
+        self._cutoff_labels:  dict[str, list[QLabel]]  = {'low': [], 'high': []}
         self._build()
 
     def _build(self):
@@ -116,16 +116,9 @@ class ControlPanel(QWidget):
         cutoff_row = QHBoxLayout()
         cutoff_row.setSpacing(8)
 
-        self._low_sliders  = []
-        self._low_labels   = []
-        self._high_sliders = []
-        self._high_labels  = []
-
-        for side, cutoffs, sliders_list, labels_list, callback in (
-            ('Low Cutoffs',  self._low_cutoffs,  self._low_sliders,  self._low_labels,  self._on_low_cutoff),
-            ('High Cutoffs', self._high_cutoffs, self._high_sliders, self._high_labels, self._on_high_cutoff),
-        ):
-            group = QGroupBox(side)
+        for band, title in (('low', 'Low Cutoffs'), ('high', 'High Cutoffs')):
+            cutoffs = self._cutoffs[band]
+            group = QGroupBox(title)
             glayout = QVBoxLayout()
             glayout.setContentsMargins(4, 4, 4, 4)
             glayout.setSpacing(2)
@@ -135,11 +128,11 @@ class ControlPanel(QWidget):
                 sld = QSlider(Qt.Horizontal)
                 sld.setRange(0, CUTOFF_SLIDER_MAX)
                 sld.setValue(cutoffs[mode])
-                sld.valueChanged.connect(lambda v, m=mode, cb=callback: cb(v, m))
+                sld.valueChanged.connect(lambda v, b=band, m=mode: self._on_cutoff(b, m, v))
                 glayout.addWidget(lbl)
                 glayout.addWidget(sld)
-                labels_list.append(lbl)
-                sliders_list.append(sld)
+                self._cutoff_labels[band].append(lbl)
+                self._cutoff_sliders[band].append(sld)
             group.setLayout(glayout)
             cutoff_row.addWidget(group)
 
@@ -186,36 +179,17 @@ class ControlPanel(QWidget):
         self._count_label.setText(str(val))
         self.count_rate_changed.emit(val)
 
-    def _on_low_cutoff(self, val: int, mode: int):
-        if mode == 0:
-            val = min(val, self._low_cutoffs[1])
-        elif mode == 1:
-            val = max(val, self._low_cutoffs[0])
-            val = min(val, self._low_cutoffs[2])
-        else:
-            val = max(val, self._low_cutoffs[1])
-        sld = self._low_sliders[mode]
+    def _on_cutoff(self, band: str, mode: int, val: int):
+        """Clamp so Quiet <= Mode 1 <= Mode 2, then show and emit the value."""
+        cutoffs = self._cutoffs[band]
+        lower = cutoffs[mode - 1] if mode > 0 else 0
+        upper = cutoffs[mode + 1] if mode < 2 else CUTOFF_SLIDER_MAX
+        val = min(max(val, lower), upper)
+        sld = self._cutoff_sliders[band][mode]
         if sld.value() != val:
             with QSignalBlocker(sld):
                 sld.setValue(val)
-        self._low_cutoffs[mode] = val
+        cutoffs[mode] = val
         name = 'Quiet' if mode == 0 else f'Mode {mode}'
-        self._low_labels[mode].setText(f'{name}: {val}')
-        self.low_cutoff_changed.emit(mode, val)
-
-    def _on_high_cutoff(self, val: int, mode: int):
-        if mode == 0:
-            val = min(val, self._high_cutoffs[1])
-        elif mode == 1:
-            val = max(val, self._high_cutoffs[0])
-            val = min(val, self._high_cutoffs[2])
-        else:
-            val = max(val, self._high_cutoffs[1])
-        sld = self._high_sliders[mode]
-        if sld.value() != val:
-            with QSignalBlocker(sld):
-                sld.setValue(val)
-        self._high_cutoffs[mode] = val
-        name = 'Quiet' if mode == 0 else f'Mode {mode}'
-        self._high_labels[mode].setText(f'{name}: {val}')
-        self.high_cutoff_changed.emit(mode, val)
+        self._cutoff_labels[band][mode].setText(f'{name}: {val}')
+        self.cutoff_changed.emit(band, mode, val)

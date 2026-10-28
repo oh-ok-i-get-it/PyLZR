@@ -1,8 +1,9 @@
 import rtmidi as midi
 from PyQt5.QtCore import QTimer
 from ..core import MIDI_PORT_NAME
-from ..core import text_styles as txt
-from ..core.app_logger import logger
+from ..core.app_logger import get_logger
+
+log = get_logger('midi')
 
 # Backends that can create their own virtual port (CoreMIDI, ALSA, JACK).
 # Windows MultiMedia cannot — a loopback driver such as loopMIDI must provide
@@ -15,7 +16,7 @@ _NOTE_LENGTH_MS = 50   # Note OFF follows Note ON after this delay
 
 
 class MIDIOutput:
-    """MIDI output port with sound-mode state.
+    """MIDI output port (a core.protocols.NoteOutput).
 
     Port selection is the same on every OS:
       1. an existing port whose name contains MIDI_PORT_NAME (e.g. a loopMIDI
@@ -27,7 +28,6 @@ class MIDIOutput:
 
     press_note() sends a Note ON followed by a Note OFF after 50 ms (the OFF
     is scheduled on the Qt event loop, so a QApplication must be running).
-    toggle_sm() flips the sm_ON flag used by KeyboardMapper and SoundMode.
     """
 
     def __init__(self):
@@ -41,13 +41,6 @@ class MIDIOutput:
         self.connected  = False
         self.port_label = None            # entry from list_ports() that is open
         self.port_name  = 'Not connected'
-
-        self.sm_ON = False
-
-        self._SM_ON_TXT    = txt.RESET + txt.B + txt.GREEN
-        self._SM_ON_TXT_B  = txt.B + txt.GREENB + txt.BLACK
-        self._SM_OFF_TXT   = txt.RESET + txt.B + txt.RED
-        self._SM_OFF_TXT_B = txt.B + txt.REDB + txt.BLACK
 
     def list_ports(self) -> list[str]:
         """Selectable port labels: the virtual port (if supported) + system ports."""
@@ -75,21 +68,21 @@ class MIDIOutput:
                 self.connected  = True
                 self.port_label = label
                 self.port_name  = label
-                logger.info(f'MIDI: opened "{label}"')
+                log.info(f'MIDI: opened "{label}"')
                 return True
             except (ValueError, NotImplementedError, midi.RtMidiError) as e:
-                logger.error(f'MIDI: could not open "{label}": {e}')
+                log.error(f'MIDI: could not open "{label}": {e}')
 
         hint = '' if self.supports_virtual else \
             f' — create a port named "{MIDI_PORT_NAME}" in loopMIDI, then reopen Settings'
-        logger.warning(f'MIDI: no output port{hint}')
+        log.warning(f'MIDI: no output port{hint}')
         return False
 
     def close(self):
         if self.midiout is not None:
             self.midiout.close_port()
             self.midiout = None
-            logger.info(f'MIDI: closed "{self.port_label}"')
+            log.info(f'MIDI: closed "{self.port_label}"')
         self.connected  = False
         self.port_label = None
         self.port_name  = 'Not connected'
@@ -109,12 +102,3 @@ class MIDIOutput:
 
         # Runs on this (GUI) thread's event loop, so every send happens on one thread
         QTimer.singleShot(_NOTE_LENGTH_MS, send_off)
-
-    def toggle_sm(self):
-        if self.sm_ON:
-            print(f"\n{self._SM_OFF_TXT}#### {self._SM_OFF_TXT_B}SOUND MODE OFF{self._SM_OFF_TXT} ####\n{txt.RESET}")
-            logger.info('Sound mode: OFF', '#e74c3c')
-        else:
-            print(f"\n{self._SM_ON_TXT}#### {self._SM_ON_TXT_B}SOUND MODE ON{self._SM_ON_TXT} ####\n{txt.RESET}")
-            logger.info('Sound mode: ON', '#2ecc71')
-        self.sm_ON = not self.sm_ON

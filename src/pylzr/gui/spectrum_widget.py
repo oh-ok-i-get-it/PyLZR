@@ -2,11 +2,23 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
+from ..analysis import BandLayout
+
 
 class SpectrumWidget(QWidget):
-    def __init__(self, audio_input):
+    """Waveform and log-log spectrum plots.
+
+    set_smoothing() applies an exponential moving average to the displayed
+    spectrum only; the analysis always uses the raw bands.
+    """
+
+    def __init__(self, bands: BandLayout):
         super().__init__()
-        self._audio = audio_input
+        self._bands = bands
+        self._waveform_x = np.arange(0, 2 * bands.chunk, 2)
+
+        self._smoothing = 0.0
+        self._smoothed: list[np.ndarray] | None = None   # low, med, high
 
         pg.setConfigOptions(antialias=True)
         self._gfx = pg.GraphicsLayoutWidget()
@@ -18,8 +30,8 @@ class SpectrumWidget(QWidget):
         self.setLayout(layout)
 
     def _build_plots(self):
-        chunk = self._audio.chunk
-        rate  = self._audio.rate
+        chunk = self._bands.chunk
+        rate  = self._bands.rate
 
         wf_x = pg.AxisItem(orientation='bottom')
         wf_x.setTicks([[(x, str(x)) for x in range(0, 2 * chunk + 1, chunk // 2)]])
@@ -42,10 +54,27 @@ class SpectrumWidget(QWidget):
         self._waveform_line = self.waveform.plot(pen='c')
         self._spectrum_lines = [self.spectrum.plot(pen=pen) for pen in ('y', 'b', 'm')]  # low, med, high
 
-    def update_waveform(self, data: np.ndarray):
-        self._waveform_line.setData(self._audio.waveform_x, data)
+    def set_smoothing(self, value: float):
+        """EMA factor 0.0 (off) – 0.9 (heavy)."""
+        self._smoothing = value
+        if value == 0.0:
+            self._smoothed = None
+
+    def update_waveform(self, chunk: np.ndarray):
+        """chunk: int16 samples; drawn scaled from ±32767 to 0–255."""
+        display = ((chunk.astype(np.int32) >> 8) + 128).astype(np.int16)
+        self._waveform_line.setData(self._waveform_x, display)
 
     def update_spectrum(self, low: np.ndarray, med: np.ndarray, high: np.ndarray):
-        axes = (self._audio.f_low, self._audio.f_med, self._audio.f_high)
-        for line, axis, data in zip(self._spectrum_lines, axes, (low, med, high), strict=True):
+        bands = [low, med, high]
+        if self._smoothing > 0.0:
+            a = self._smoothing
+            if self._smoothed is None:
+                self._smoothed = [b.copy() for b in bands]
+            else:
+                self._smoothed = [a * s + (1 - a) * b for s, b in zip(self._smoothed, bands, strict=True)]
+            bands = self._smoothed
+
+        axes = (self._bands.f_low, self._bands.f_med, self._bands.f_high)
+        for line, axis, data in zip(self._spectrum_lines, axes, bands, strict=True):
             line.setData(axis, data)

@@ -67,6 +67,10 @@ def test_note_sent_only_when_mode_pair_changes():
     assert out.notes == [106, 63 + DUAL_MODE_OFFSET, 106]
 
 
+def test_sound_mode_switch_starts_off():
+    assert make_sound_mode(RecordingOutput()).enabled is False
+
+
 def test_dual_mode_starts_on_and_toggles_after_rate():
     sm = make_sound_mode(RecordingOutput(), dm_toggle_rate=3)
     assert sm.dm_on is True
@@ -86,11 +90,11 @@ def test_dual_mode_toggle_rate_can_change():
     assert sm.dm_on is False
 
 
-@pytest.mark.parametrize('high', [False, True])
-def test_set_cutoff_moves_threshold_for_one_band(high):
+@pytest.mark.parametrize('band', ['low', 'high'])
+def test_set_cutoff_moves_threshold_for_one_band(band):
     sm = make_sound_mode(RecordingOutput())
-    sm.set_cutoff(250, 1, high=high)        # Mode 1 cutoff: 300 -> 250
+    sm.set_cutoff(band, 1, 250)             # Mode 1 cutoff: 300 -> 250
     sm.set_mode(280, 280)
-    changed, untouched = (sm.high_mode, sm.low_mode) if high else (sm.low_mode, sm.high_mode)
+    changed, untouched = (sm.high_mode, sm.low_mode) if band == 'high' else (sm.low_mode, sm.high_mode)
     assert changed == 2
     assert untouched == 1

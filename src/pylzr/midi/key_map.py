@@ -1,6 +1,11 @@
+from collections.abc import Callable
+
 from PyQt5.QtCore import Qt
-from ..core import text_styles as txt
-from ..core.app_logger import logger
+
+from ..core.app_logger import Tone, get_logger
+from ..core.protocols import NoteOutput
+
+log = get_logger('keys')
 
 _FIRST_NOTE = 60  # C3
 
@@ -30,22 +35,18 @@ _KEY_TO_NOTE = {int(key): (_FIRST_NOTE + i, name) for i, (key, name) in enumerat
 class KeyboardMapper:
     """Routes Qt key codes to MIDI notes via a static lookup table.
 
-    handle_key() is a no-op when sound mode is active (midi_out.sm_ON).
+    handle_key() is a no-op while is_blocked() returns True (sound mode on).
     """
 
-    def __init__(self, midi_out):
-        self._midi = midi_out
+    def __init__(self, output: NoteOutput, is_blocked: Callable[[], bool]):
+        self._output = output
+        self._is_blocked = is_blocked
 
     def handle_key(self, key_num: int):
-        if self._midi.sm_ON:
+        if self._is_blocked():
             return
         mapping = _KEY_TO_NOTE.get(key_num)
         if mapping is not None:
             note, name = mapping
-            print(
-                txt.B + txt.CYANB + txt.BLACK + 'Pressed:' +
-                txt.RESET + txt.CYAN + txt.B + f' {name}' + txt.RESET
-            )
-            print(f'midi value: {note}')
-            logger.info(f'Key: {name} → MIDI {note}', '#00bcd4')
-            self._midi.press_note(note)
+            log.info(f'Key: {name} → MIDI {note}', extra={'tone': Tone.KEY})
+            self._output.press_note(note)

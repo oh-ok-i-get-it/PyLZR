@@ -2,6 +2,7 @@
 (keys, panel signals) with fake audio and MIDI."""
 
 import gc
+import logging
 
 import pyaudio as fake_pyaudio
 import rtmidi as fake_rtmidi
@@ -77,7 +78,7 @@ def test_sound_mode_buttons_stay_in_sync(harness):
     assert not controls._sm_button.isChecked() and not settings._sm_btn.isChecked()
     settings._sm_btn.click()
     assert controls._sm_button.isChecked() and settings._sm_btn.isChecked()
-    assert harness.window.midi_out.sm_ON
+    assert harness.window.engine.sound_mode.enabled
 
 
 def test_status_label_shows_last_key(harness):
@@ -118,7 +119,7 @@ def test_switch_audio_device(harness):
     w = harness.window
     old_stream = fake_pyaudio.streams[-1]
     w.settings_panel.audio_device_changed.emit(1)
-    assert w.audio.device_name == 'Fake Line In'
+    assert w.engine.audio.device_name == 'Fake Line In'
     assert w.settings_panel._audio_val.text() == 'Fake Line In'
     assert old_stream.closed
     harness.feed(tone_chunks(2, (80, 400)))      # audio still flows
@@ -129,7 +130,7 @@ def test_failed_audio_device_switch_keeps_old_device(harness):
     w = harness.window
     fake_pyaudio.fail_open.add(1)
     w.settings_panel.audio_device_changed.emit(1)
-    assert w.audio.device_name == 'Fake Mic'
+    assert w.engine.audio.device_name == 'Fake Mic'
     assert w.settings_panel._audio_val.text() == 'Switch failed'
     assert 'Audio device switch failed' in log_text(harness)
     harness.feed(tone_chunks(2, (80, 400)))
@@ -137,11 +138,11 @@ def test_failed_audio_device_switch_keeps_old_device(harness):
 
 
 def test_default_log_level_matches_settings(harness):
-    from pylzr.core.app_logger import logger
+    log = logging.getLogger('pylzr.test')
     assert harness.window.settings_panel._log_combo.currentText() == 'Info'
     before = log_text(harness)
-    logger.debug('hidden at the default level')
-    logger.info('shown at the default level')
+    log.debug('hidden at the default level')
+    log.info('shown at the default level')
     added = log_text(harness)[len(before):]
     assert 'hidden' not in added and 'shown' in added
 
@@ -170,4 +171,4 @@ def test_close_releases_audio_midi_and_fft_thread(harness):
     gc.collect()
     assert fake_pyaudio.streams[-1].closed
     assert not w.midi_out.connected and fake_rtmidi.live_virtual == []
-    wait_until(lambda: w.fft_thread.isFinished())
+    wait_until(lambda: w.engine.fft_thread.isFinished())
