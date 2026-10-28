@@ -4,26 +4,33 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtCore import Qt, QPoint
 
-from ..core import WINDOW_W, WINDOW_H
+from ..core import CONTROL_MODES, WINDOW_W, WINDOW_H
 from ..core.app_logger import LOGGER_NAME, Tone, get_logger
+from ..core.output_switch import OutputSwitch
 from ..engine   import AudioEngine
 from ..midi     import MIDIOutput, KeyboardMapper
+from ..dmx      import DMXOutput, PortAddress
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
 from .settings_panel  import SettingsPanel
 from .log_panel       import LogPanel, AvgPanel
 from .settings_store  import DEFAULTS, SettingsStore
+from .dmx_tester      import DMXTesterWindow
 
 log = get_logger('app')
 
 
 class MainWindow(QWidget):
     """Top-level application window: builds the panels and wires them to the
-    AudioEngine (audio → analysis → sound mode) and the MIDI output.
+    AudioEngine (audio → analysis → sound mode) and the outputs.
+
+    Cues from sound mode and the keyboard go through an OutputSwitch to the
+    output chosen by Control Mode: MIDI, or DMX (Art-Net). The DMX output
+    only sends while DMX is chosen.
 
     This class only connects things — the pipeline lives in engine.py and
-    the audio/, analysis/ and midi/ packages. User settings are restored from
-    the SettingsStore at startup and saved whenever they change.
+    the audio/, analysis/, midi/ and dmx/ packages. User settings are
+    restored from the SettingsStore at startup and saved whenever they change.
     """
 
     def __init__(self):
@@ -40,9 +47,13 @@ class MainWindow(QWidget):
         # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
         self._open_saved_midi_port()
-        self.engine   = AudioEngine(self.midi_out, parent=self,
+        self.dmx_out  = DMXOutput(self.store.get('dmx/node_ip'),
+                                  PortAddress(*self.store.get('dmx/port_address')), parent=self)
+        self.output   = OutputSwitch({'MIDI': self.midi_out, 'DMX': self.dmx_out}, CONTROL_MODES[0])
+        self.engine   = AudioEngine(self.output, parent=self,
                                     device_name=self.store.get('audio/device') or None)
-        self.key_map  = KeyboardMapper(self.midi_out, is_blocked=lambda: self.engine.sound_mode.enabled)
+        self.key_map  = KeyboardMapper(self.output, is_blocked=lambda: self.engine.sound_mode.enabled)
+        self._dmx_tester: DMXTesterWindow | None = None   # created when first opened
 
         # GUI panels
         self.spectrum_widget = SpectrumWidget(self.engine.bands)
@@ -76,6 +87,7 @@ class MainWindow(QWidget):
         engine.modes_updated.connect(self._on_modes_updated)
         engine.level_measured.connect(self.settings_panel.set_level)
         engine.diagnostics_updated.connect(self._on_diagnostics)
+        self.dmx_out.status_changed.connect(self.settings_panel.set_dmx_status)
 
         # Control panel → engine
         self.controls.count_rate_changed.connect(engine.set_count_rate)
@@ -94,6 +106,8 @@ class MainWindow(QWidget):
         self.settings_panel.control_mode_changed.connect(self._on_control_mode_changed)
         self.settings_panel.reset_requested.connect(self._reset_settings)
         self.settings_panel.audio_devices_refresh_requested.connect(self._rescan_audio_devices)
+        self.settings_panel.dmx_node_changed.connect(self._on_dmx_node_changed)
+        self.settings_panel.dmx_tester_requested.connect(self._open_dmx_tester)
 
         # Restore saved settings through the panels (same path as user input),
         # then save every later change
@@ -121,6 +135,8 @@ class MainWindow(QWidget):
         panel.set_fft_window(get('analysis/fft_window'))
         panel.set_smoothing(get('display/smoothing'))
         panel.set_log_level(get('app/log_level'))
+        panel.set_dmx_node(get('dmx/node_ip'), get('dmx/port_address'))
+        panel.set_control_mode(get('app/control_mode'))
 
     def _save_changes(self):
         store, controls, panel = self.store, self.controls, self.settings_panel
@@ -130,7 +146,8 @@ class MainWindow(QWidget):
         panel.fft_window_changed.connect(lambda v: store.set('analysis/fft_window', v))
         panel.smoothing_changed.connect(lambda v: store.set('display/smoothing', v))
         panel.log_level_changed.connect(lambda v: store.set('app/log_level', v))
-        # Devices are saved in their handlers, once the switch has succeeded
+        panel.control_mode_changed.connect(lambda v: store.set('app/control_mode', v))
+        # Devices and the DMX node are saved in their handlers, once the switch has succeeded
 
     def _reset_settings(self):
         self._apply_settings(lambda key: DEFAULTS[key])
@@ -219,8 +236,39 @@ class MainWindow(QWidget):
         log.info(f'Log level: {level}', extra={'tone': Tone.MUTED})
 
     def _on_control_mode_changed(self, mode: str):
-        if mode == 'DMX':
-            log.info('Control mode: DMX selected (not yet implemented)', extra={'tone': Tone.NOTICE})
+        """Route cues to `mode`'s output. DMX sends only while chosen; leaving
+        it blacks the fixtures out and closes the channel tester."""
+        self.output.select(mode)
+        dmx = mode == 'DMX'
+        if dmx:
+            self.dmx_out.start()
+        else:
+            self._close_dmx_tester()
+            self.dmx_out.stop()
+        self.settings_panel.set_dmx_tester_enabled(dmx)
+        log.info(f'Control mode: {mode}', extra={'tone': Tone.MUTED})
+
+    def _on_dmx_node_changed(self, ip: str, port_address: list[int]):
+        port = PortAddress(*port_address)
+        if (ip, port) == (self.dmx_out.node_ip, self.dmx_out.port):
+            return
+        if self.dmx_out.configure(ip, port):
+            self.store.set('dmx/node_ip', ip)
+            self.store.set('dmx/port_address', port_address)
+
+    def _open_dmx_tester(self):
+        if self._dmx_tester is None:
+            tester = DMXTesterWindow(self)
+            tester.channels_changed.connect(self.dmx_out.set_test_values)
+            tester.closed.connect(self.dmx_out.clear_test_values)
+            self._dmx_tester = tester
+        self._dmx_tester.show()
+        self._dmx_tester.raise_()
+        self._dmx_tester.activateWindow()
+
+    def _close_dmx_tester(self):
+        if self._dmx_tester is not None and self._dmx_tester.isVisible():
+            self._dmx_tester.close()
 
     # ------------------------------------------------------------------
     # Qt event overrides
@@ -242,7 +290,9 @@ class MainWindow(QWidget):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        self._close_dmx_tester()
         self.engine.shutdown()
+        self.dmx_out.close()        # blacks out the fixtures if DMX was sending
         self.midi_out.close()
         logging.getLogger(LOGGER_NAME).removeHandler(self.log_panel.log_handler)
         super().closeEvent(event)

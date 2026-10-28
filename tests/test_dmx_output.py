@@ -4,19 +4,13 @@ import pytest
 
 from fakes import udp as fake_udp
 from fakes.udp import FakeSocket
-from helpers import wait_until
+from helpers import dmx_packets as packets, wait_until
 from pylzr.core import DMX_REFRESH_HZ
 from pylzr.dmx import DMXOutput, PortAddress
 
 pytestmark = pytest.mark.usefixtures('qapp')     # QTimer needs a Qt application
 
 NODE = ('10.201.6.100', 6454)
-
-
-def packets() -> list[dict]:
-    """Every ArtDmx packet sent so far, decoded."""
-    return [{'to': to, 'sequence': p[12], 'sub_uni': p[14], 'net': p[15], 'data': p[18:]}
-            for p, to in fake_udp.sent]
 
 
 def frames() -> list[bytes]:

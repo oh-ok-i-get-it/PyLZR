@@ -52,6 +52,18 @@ def _fresh_state(tmp_path):
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / 'config'))
 
 
+@pytest.fixture(autouse=True)
+def _no_real_network(monkeypatch):
+    """Windows send DMX through fake sockets, so no test ever puts Art-Net
+    packets on the real network (tests of pylzr.dmx pass FakeSocket or a
+    loopback address themselves)."""
+    from functools import partial
+
+    import pylzr.gui.main_window as main_window
+    from pylzr.dmx import DMXOutput
+    monkeypatch.setattr(main_window, 'DMXOutput', partial(DMXOutput, socket_factory=fake_udp.FakeSocket))
+
+
 @pytest.fixture(params=['win', 'mac'])
 def os_name(request):
     """Run the test once per simulated OS (MIDI backend)."""
