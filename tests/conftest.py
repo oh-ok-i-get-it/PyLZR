@@ -32,6 +32,7 @@ fake_pyaudio = _install_fake('pyaudio')
 from PyQt5.QtCore import QCoreApplication, QEvent, QSettings  # noqa: E402
 from PyQt5.QtWidgets import QApplication            # noqa: E402
 
+from fakes import udp as fake_udp                  # noqa: E402
 from helpers import WindowHarness                  # noqa: E402
 
 
@@ -47,6 +48,7 @@ def _fresh_state(tmp_path):
     real user config)."""
     fake_rtmidi.reset('mac')
     fake_pyaudio.reset()
+    fake_udp.reset()
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / 'config'))
 
 
