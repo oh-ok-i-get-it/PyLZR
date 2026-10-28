@@ -91,9 +91,29 @@ def test_pipeline_matches_golden(os_name, make_window):
     assert result['note_ons'] == golden['note_ons']
     assert len(result['frames']) == len(golden['frames'])
     assert len(result['averages']) == len(golden['averages'])
-    # float32 FFT: allow tiny differences between platforms / numpy versions
-    np.testing.assert_allclose(result['frames'], golden['frames'], rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(result['averages'], golden['averages'], rtol=1e-5, atol=1e-6)
+    assert_close_to_golden(result['frames'], golden['frames'])
+    assert_close_to_golden(result['averages'], golden['averages'])
+
+
+def assert_close_to_golden(actual, golden, scale: float = 1e-5):
+    """Compare a table of floats with its golden values, column by column.
+
+    The FFT runs in float32, and its rounding differs slightly between
+    SciPy/NumPy versions and CPU types (e.g. Apple Silicon vs x86). That noise
+    is absolute (~1e-5 seen in CI), so it can be large *relative* to small
+    values like a band's leakage during a pure tone. Each column therefore
+    allows an absolute error of `scale` x its largest golden value: far above
+    the rounding noise, yet a 0.1% change in real output still fails.
+    """
+    actual, golden = np.asarray(actual), np.asarray(golden)
+    tolerance = scale * np.abs(golden).max(axis=0)          # one per column
+    excess = np.abs(actual - golden) - tolerance
+    bad = np.argwhere(excess > 0)
+    assert bad.size == 0, '\n'.join(
+        [f'{len(bad)} value(s) differ from golden by more than {scale:g} x column max:']
+        + [f'  [{r}, {c}]: actual {actual[r, c]!r}, golden {golden[r, c]!r}, '
+           f'tolerance {tolerance[c]:.3g}' for r, c in bad[:10]]
+    )
 
 
 def test_smoothing_does_not_affect_analysis(make_window):
