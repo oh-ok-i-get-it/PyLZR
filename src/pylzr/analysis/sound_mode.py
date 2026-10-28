@@ -1,28 +1,26 @@
 from bisect import bisect_right
 from collections.abc import Sequence
 from ..core import DM_SEMITONE_OFFSET, MIDI_SPACE_NOTE
-from ..core import text_styles as txt
-from ..core.app_logger import logger
+from ..core.app_logger import Tone, get_logger
+from ..core.protocols import NoteOutput
+
+log = get_logger('soundmode')
 
 
 class SoundMode:
     """Maps windowed frequency averages to MIDI notes via a 4x4 mode matrix.
 
-    Maintains two independent threshold axes (low-band and high-band), each
+    Maintains two independent threshold axes ('low' and 'high' band), each
     with three cutoff levels that divide the energy range into four modes
-    (0-3). The (low_mode, high_mode) pair selects a MIDI note from MODE_MAP,
-    which is then sent through the injected output object.
+    (0-3). The (low_mode, high_mode) pair selects a note from MODE_MAP, which
+    is sent through the injected NoteOutput.
 
-    output_handler must expose press_note(note: int).
+    `enabled` is the app's Sound Mode switch: while it is off, callers skip
+    check_mode() and the keyboard plays notes instead.
 
     Extension point: to route mode changes to DMX or other outputs alongside
-    (or instead of) MIDI, replace or wrap output_handler with an object that
-    dispatches to multiple systems. A future refactor could accept a list of
-    handlers each implementing on_mode_change(low_mode, high_mode, note).
+    (or instead of) MIDI, pass an output that dispatches to several systems.
     """
-
-    # Terminal color per mode index (same scheme for both bands)
-    MODE_COLOR = {0: txt.YELLOW, 1: txt.BLUE, 2: txt.CYAN, 3: txt.PURPLE}
 
     # MODE_MAP[low_mode][high_mode] -> base MIDI note
     MODE_MAP = {
@@ -36,10 +34,11 @@ class SoundMode:
         self,
         low_thresholds:  Sequence[float],   # (quiet, mode 1, mode 2) cutoffs
         high_thresholds: Sequence[float],
-        output_handler,                      # any object with press_note(note: int)
+        output: NoteOutput,
         dm_toggle_rate: int = 120,
     ):
-        self._output = output_handler
+        self._output = output
+        self.enabled = False
 
         self.low_mode  = -1
         self.high_mode = -1
@@ -47,22 +46,17 @@ class SoundMode:
         self.dm_on         = True
         self.dm_mode_label = 1
 
-        self._low_thresholds  = list(low_thresholds)
-        self._high_thresholds = list(high_thresholds)
+        self._thresholds = {'low': list(low_thresholds), 'high': list(high_thresholds)}
 
         self._dm_count       = 0
         self._dm_toggle_rate = dm_toggle_rate
 
     def set_mode(self, low_avg: float, high_avg: float):
-        self.low_mode  = bisect_right(self._low_thresholds,  low_avg)
-        self.high_mode = bisect_right(self._high_thresholds, high_avg)
+        self.low_mode  = bisect_right(self._thresholds['low'],  low_avg)
+        self.high_mode = bisect_right(self._thresholds['high'], high_avg)
 
     def update_mode(self):
         lm, hm = self.low_mode, self.high_mode
-        text = (
-            f"{self.MODE_COLOR[lm]}{txt.I}"
-            f"\n>>>> SM: {txt.B}LOW{txt.BOFF} {lm} SENT \t{txt.RESET}"
-        )
         midi_base = self.MODE_MAP[lm][hm]
 
         if (not self.dm_on) or (midi_base == MIDI_SPACE_NOTE):
@@ -74,9 +68,8 @@ class SoundMode:
 
         self.dm_mode_label = mode_label
         self._output.press_note(note)
-        print(f"{text}\t{txt.B}{self.MODE_COLOR[hm]}HIGH{txt.BOFF} {hm} SENT <<<<\n{txt.IOFF}")
-        print(f"{txt.WHITE}\t|| DUAL MODE: {mode_label} ||\n\tMIDI NOTE: {note}")
-        logger.info(f'SoundMode: LOW={lm} HIGH={hm} | DualMode={mode_label} | MIDI={note}', '#ffffff')
+        log.info(f'SoundMode: LOW={lm} HIGH={hm} | DualMode={mode_label} | MIDI={note}',
+                 extra={'tone': Tone.MODE})
 
     def check_mode(self, low_avg: float, high_avg: float):
         prev = (self.low_mode, self.high_mode)
@@ -90,7 +83,8 @@ class SoundMode:
             self.toggle_dm_mode()
             self._dm_count = 0
 
-    def set_dm_toggle_rate(self, rate: float):
+    def set_dm_toggle_rate(self, rate: int):
+        """Number of averaging windows between dual-mode flips."""
         self._dm_toggle_rate = rate
 
     def toggle_dm_mode(self):
@@ -100,8 +94,6 @@ class SoundMode:
     def dm_countdown(self) -> int:
         return int(self._dm_toggle_rate - self._dm_count)
 
-    def set_cutoff(self, cutoff: float, mode: int, *, high: bool = False):
-        if high:
-            self._high_thresholds[mode] = cutoff
-        else:
-            self._low_thresholds[mode] = cutoff
+    def set_cutoff(self, band: str, mode: int, cutoff: float):
+        """band: 'low' | 'high'; mode: 0 (quiet), 1 or 2."""
+        self._thresholds[band][mode] = cutoff

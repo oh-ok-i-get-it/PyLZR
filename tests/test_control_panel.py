@@ -10,11 +10,7 @@ def panel(qapp):
 
 def cutoff_sliders(panel, band):
     """Single access point for the private slider lists."""
-    return panel._low_sliders if band == 'low' else panel._high_sliders
-
-
-def cutoff_signal(panel, band):
-    return panel.low_cutoff_changed if band == 'low' else panel.high_cutoff_changed
+    return panel._cutoff_sliders[band]
 
 
 @pytest.mark.parametrize('band', ['low', 'high'])
@@ -34,11 +30,11 @@ def test_defaults(panel, band):
 ])
 def test_cutoffs_stay_ordered(panel, band, mode, requested, expected):
     emitted = []
-    cutoff_signal(panel, band).connect(lambda m, v: emitted.append((m, v)))
+    panel.cutoff_changed.connect(lambda b, m, v: emitted.append((b, m, v)))
     slider = cutoff_sliders(panel, band)[mode]
     slider.setValue(requested)
     assert slider.value() == expected
-    assert emitted == [(mode, expected)]
+    assert emitted == [(band, mode, expected)]
 
 
 def test_bands_are_independent(panel):

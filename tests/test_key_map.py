@@ -20,9 +20,8 @@ MAPPED_KEYS = [
 ]
 
 
-class FakeMidiOut:
-    def __init__(self, sound_mode_on=False):
-        self.sm_ON = sound_mode_on
+class FakeOutput:
+    def __init__(self):
         self.notes = []
 
     def press_note(self, note):
@@ -31,8 +30,8 @@ class FakeMidiOut:
 
 def make_mapper(sound_mode_on=False):
     """Single construction point — update here if the constructor changes."""
-    out = FakeMidiOut(sound_mode_on)
-    return KeyboardMapper(out), out
+    out = FakeOutput()
+    return KeyboardMapper(out, is_blocked=lambda: sound_mode_on), out
 
 
 @pytest.mark.parametrize('index, key', list(enumerate(MAPPED_KEYS)))

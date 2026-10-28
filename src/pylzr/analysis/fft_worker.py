@@ -2,6 +2,8 @@ import numpy as np
 from scipy.fftpack import rfft
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
+from .bands import BandLayout
+
 
 class FFTWorker(QObject):
     """Qt worker that runs rfft on audio chunks off the main thread.
@@ -24,26 +26,18 @@ class FFTWorker(QObject):
     }
     WINDOW_NAMES = tuple(_WINDOWS)   # valid set_window() names, rectangle first
 
-    def __init__(self, sp_scale: float, lo_cut: int, med_cut: int,
-                 hi_cut: int, chunk: int):
+    def __init__(self, bands: BandLayout):
         super().__init__()
-        self.sp_scale = sp_scale
-        self.lo_cut   = lo_cut
-        self.med_cut  = med_cut
-        self.hi_cut   = hi_cut
-        self._chunk   = chunk
-        self._window  = np.ones(chunk, dtype=np.float32)  # rectangle
+        self._bands  = bands
+        self._window = self._WINDOWS['rectangle'](bands.chunk)
 
     @pyqtSlot(np.ndarray)
     def process(self, wf_buffer: np.ndarray):
         windowed = wf_buffer.astype(np.float32) * self._window
-        spec = np.abs(rfft(windowed)) * self.sp_scale
-        low  = spec[:self.lo_cut]
-        med  = spec[self.lo_cut:self.med_cut]
-        hi   = spec[self.med_cut:self.hi_cut]
-        self.resultReady.emit(low, med, hi)
+        spec = np.abs(rfft(windowed)) * self._bands.scale
+        self.resultReady.emit(*self._bands.split(spec))
 
     def set_window(self, name: str):
         """Switch windowing function (one of WINDOW_NAMES; unknown names fall back to rectangle)."""
         fn = self._WINDOWS.get(name, self._WINDOWS['rectangle'])
-        self._window = fn(self._chunk)
+        self._window = fn(self._bands.chunk)

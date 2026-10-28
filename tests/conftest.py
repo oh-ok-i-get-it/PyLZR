@@ -45,9 +45,6 @@ def _fresh_state():
     """Every test starts on a simulated macOS with default devices."""
     fake_rtmidi.reset('mac')
     fake_pyaudio.reset()
-    yield
-    from pylzr.core.app_logger import logger
-    logger.set_min_level('info')    # the app's default
 
 
 @pytest.fixture(params=['win', 'mac'])
@@ -60,12 +57,12 @@ def os_name(request):
 @pytest.fixture
 def make_window(qapp):
     """Factory for harnessed main windows; closes and deletes them afterwards."""
-    from pylzr.gui import PyLZR
+    from pylzr.gui import MainWindow
 
     created = []
 
     def factory() -> WindowHarness:
-        harness = WindowHarness(PyLZR())
+        harness = WindowHarness(MainWindow())
         created.append(harness)
         return harness
 

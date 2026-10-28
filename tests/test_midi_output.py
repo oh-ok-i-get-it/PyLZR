@@ -103,12 +103,3 @@ def test_close_releases_port():
     gc.collect()
     assert not m.connected and fake_rtmidi.live_virtual == []
     m.close()   # safe to call twice
-
-
-def test_toggle_sound_mode():
-    m = MIDIOutput()
-    assert m.sm_ON is False
-    m.toggle_sm()
-    assert m.sm_ON is True
-    m.toggle_sm()
-    assert m.sm_ON is False
