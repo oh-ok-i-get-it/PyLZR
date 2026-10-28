@@ -14,6 +14,15 @@ _ERROR_TEXT = {
 }
 
 
+def is_ipv4(text: str) -> bool:
+    """True for a dotted IPv4 address such as '10.201.6.100'."""
+    try:
+        ipaddress.IPv4Address(text)
+        return True
+    except ValueError:
+        return False
+
+
 def describe_error(e: OSError) -> str:
     return _ERROR_TEXT.get(e.errno) or e.strerror or str(e)
 

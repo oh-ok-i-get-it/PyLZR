@@ -5,7 +5,7 @@ import pytest
 
 from fakes import udp as fake_udp
 from fakes.udp import FakeSocket
-from pylzr.dmx import UdpSender
+from pylzr.dmx import UdpSender, is_ipv4
 
 
 @pytest.fixture
@@ -109,3 +109,12 @@ def test_real_datagram_over_loopback():
     finally:
         sender.close()
         receiver.close()
+
+
+@pytest.mark.parametrize('text, ok', [
+    ('10.201.6.100', True), ('255.255.255.255', True), ('0.0.0.0', True),
+    ('10.201.6', False), ('10.201.6.256', False), ('010.1.1.1', False), ('::1', False),
+    ('node.local', False), ('', False), (' 10.201.6.100', False),
+])
+def test_is_ipv4(text, ok):
+    assert is_ipv4(text) is ok

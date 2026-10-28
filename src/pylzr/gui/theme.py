@@ -7,6 +7,7 @@ LOW_BAND  = '#d4a017'   # low-band values (mode display, averages)
 HIGH_BAND = '#9b59b6'   # high-band values
 ACCENT    = '#58a6ff'   # section titles, focus/hover, active gear
 OK        = '#2ecc71'   # connected / on
+WARN      = '#e3b341'   # working, but needs attention
 ERROR     = '#e74c3c'   # disconnected / clipping
 
 # In-app console colours: tagged tones first, then by log level
@@ -16,7 +17,7 @@ LOG_TONES = {
     Tone.MODE:   '#ffffff',
     Tone.KEY:    '#00bcd4',
     Tone.MUTED:  '#8a8a8a',
-    Tone.NOTICE: '#e3b341',
+    Tone.NOTICE: WARN,
 }
 LOG_LEVELS = {
     logging.DEBUG:   '#666666',

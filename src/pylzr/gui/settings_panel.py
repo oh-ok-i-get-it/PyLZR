@@ -1,9 +1,12 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QFrame, QSlider, QPushButton, QProgressBar,
+    QFrame, QSlider, QPushButton, QProgressBar, QLineEdit, QSpinBox, QAbstractSpinBox,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QRegularExpression, pyqtSignal
+from PyQt5.QtGui import QRegularExpressionValidator
 from ..analysis import FFTWorker
+from ..core import CONTROL_MODES, DMX_DEFAULT_NODE_IP
+from ..dmx import is_ipv4
 from . import theme
 
 _W = 560  # panel width — wide enough for 3 columns
@@ -36,6 +39,15 @@ _COMBO_STYLE = (
     '}'
 )
 
+_INPUT_STYLE = (
+    'QLineEdit, QSpinBox {'
+    '  background: #1a1a1a; color: #c9d1d9;'
+    '  border: 1px solid #2e2e2e; border-radius: 3px;'
+    '  padding: 2px 5px; font-size: 10px;'
+    '}'
+    f'QLineEdit:hover, QSpinBox:hover, QLineEdit:focus, QSpinBox:focus {{ border-color: {theme.ACCENT}; }}'
+)
+
 _SLIDER_STYLE = (
     'QSlider::groove:horizontal { background: #2a2a2a; height: 4px; border-radius: 2px; }'
     'QSlider::handle:horizontal {'
@@ -64,18 +76,31 @@ _SM_STYLE = (
     '}'
     f'QPushButton:checked {{ background:#0f3d1a; color:{theme.OK}; border-color:{theme.OK}; }}'
     f'QPushButton:hover   {{ border-color:{theme.ACCENT}; }}'
+    'QPushButton:disabled { color:#3a3a3a; border-color:#222222; }'
 )
 
 _IND_ON      = f'border-radius:5px; background:{theme.OK};'
+_IND_WARN    = f'border-radius:5px; background:{theme.WARN};'
 _IND_OFF     = f'border-radius:5px; background:{theme.ERROR};'
 _IND_NA      = 'border-radius:5px; background:#383838;'
+
+# DMXOutput status state -> indicator
+_DMX_DOTS = {'off': _IND_NA, 'sending': _IND_ON, 'warning': _IND_WARN, 'error': _IND_OFF}
 _CLIP_ON     = f'border-radius:3px; background:{theme.ERROR}; font-size:8px; color:#fff; padding:1px 3px;'
 _CLIP_OFF    = 'border-radius:3px; background:#252525; font-size:8px; color:#444; padding:1px 3px;'
 _DIV_STYLE   = 'background:#1e1e1e; border:none;'
 
 # (label, value) choices for the fixed dropdowns
 _LOG_LEVELS    = [('Info', 'info'), ('Debug', 'debug'), ('Quiet', 'quiet')]
-_CONTROL_MODES = [('MIDI', 'MIDI'), ('DMX  (coming soon)', 'DMX')]
+_MODE_LABELS   = {'DMX': 'DMX (Art-Net)'}
+_CONTROL_MODES = [(_MODE_LABELS.get(mode, mode), mode) for mode in CONTROL_MODES]
+
+# Accepts what can still become an IPv4 address while typing; is_ipv4()
+# decides when editing finishes.
+_IPV4_TYPING = QRegularExpression(r'^(\d{1,3}(\.\d{0,3}){0,3})?$')
+
+_TESTER_TIP_ON  = 'Open a window with one slider per DMX channel. Values go out live.'
+_TESTER_TIP_OFF = 'Set Control Mode to DMX to use the channel tester.'
 
 
 # ── Small helpers ─────────────────────────────────────────────────────────────
@@ -179,9 +204,12 @@ class SettingsPanel(QWidget):
         smoothing_changed(float)   — 0.0 – 0.9
         log_level_changed(str)     — 'debug' | 'info' | 'quiet'
         app_sm_toggled()
-        control_mode_changed(str)  — 'MIDI' | 'DMX'
+        control_mode_changed(str)  — one of core.CONTROL_MODES ('MIDI' | 'DMX')
         reset_requested()          — 'Reset to defaults' clicked
         audio_devices_refresh_requested() — ↻ next to the input device clicked
+        dmx_node_changed(str, list) — Art-Net node IP, [net, subnet, universe];
+                                      only valid values, only when they change
+        dmx_tester_requested()     — 'Channel tester…' clicked
 
     The set_*() setters change a control as if the user had, emitting its
     signal when the value changes (used to restore saved settings).
@@ -197,6 +225,8 @@ class SettingsPanel(QWidget):
     control_mode_changed = pyqtSignal(str)
     reset_requested      = pyqtSignal()
     audio_devices_refresh_requested = pyqtSignal()
+    dmx_node_changed     = pyqtSignal(str, list)
+    dmx_tester_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -217,6 +247,8 @@ class SettingsPanel(QWidget):
         root.addWidget(self._build_top())
         root.addWidget(_divider(QFrame.HLine))
         root.addWidget(self._build_columns())
+        root.addWidget(_divider(QFrame.HLine))
+        root.addWidget(self._build_dmx())
         root.addWidget(_divider(QFrame.HLine))
         root.addWidget(self._build_performance())
 
@@ -370,7 +402,8 @@ class SettingsPanel(QWidget):
 
         # Control Mode dropdown
         self._mode_combo = self._dropdown(self.control_mode_changed, _CONTROL_MODES)
-        self._mode_combo.setToolTip('DMX output is not yet implemented.')
+        self._mode_combo.setToolTip('Where cues go: MIDI (e.g. to SoundSwitch), or DMX straight to an '
+                                    'Art-Net node (set up below).')
         v.addLayout(_labeled_control('Control Mode', None, self._mode_combo))
 
         # Log Level dropdown
@@ -401,6 +434,55 @@ class SettingsPanel(QWidget):
 
         v.addStretch(1)
         return _pad(v, l=10, r=14)
+
+    def _build_dmx(self) -> QWidget:
+        """Full-width Art-Net row: node address, universe, channel tester."""
+        v = QVBoxLayout()
+        v.setSpacing(6)
+        v.addWidget(_section('DMX (ART-NET)'))
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(5)
+
+        self._dmx_node = (DMX_DEFAULT_NODE_IP, [0, 0, 0])   # last valid values emitted
+
+        self._node_ip_edit = QLineEdit(DMX_DEFAULT_NODE_IP)
+        self._node_ip_edit.setValidator(QRegularExpressionValidator(_IPV4_TYPING))
+        self._node_ip_edit.setFixedWidth(104)
+        self._node_ip_edit.setStyleSheet(_INPUT_STYLE)
+        self._node_ip_edit.setToolTip("The Art-Net node's IP address (CR011R factory default: "
+                                      f'{DMX_DEFAULT_NODE_IP})')
+        self._node_ip_edit.editingFinished.connect(self._on_node_ip_edited)
+        row.addWidget(_lbl('Node IP'))
+        row.addWidget(self._node_ip_edit)
+        row.addSpacing(6)
+
+        self._port_spins = []
+        for label, top, tip in (('Net', 127, 'Art-Net Net (0–127)'),
+                                ('Sub', 15, 'Art-Net SubNet (0–15)'),
+                                ('Uni', 15, 'Art-Net Universe (0–15)')):
+            spin = QSpinBox()
+            spin.setRange(0, top)
+            spin.setButtonSymbols(QAbstractSpinBox.NoButtons)
+            spin.setFixedWidth(34)
+            spin.setStyleSheet(_INPUT_STYLE)
+            spin.setToolTip(f'{tip} — as set in the node\'s menu. Type, scroll or use the arrow keys.')
+            spin.valueChanged.connect(lambda _value: self._emit_dmx_node())
+            row.addWidget(_lbl(label))
+            row.addWidget(spin)
+            self._port_spins.append(spin)
+        row.addStretch(1)
+
+        self._tester_btn = QPushButton('Channel tester…')
+        self._tester_btn.setFixedHeight(22)
+        self._tester_btn.setStyleSheet(_SM_STYLE)
+        self._tester_btn.clicked.connect(lambda: self.dmx_tester_requested.emit())
+        row.addWidget(self._tester_btn)
+        self.set_dmx_tester_enabled(False)
+
+        v.addLayout(row)
+        return _pad(v, t=8, b=10)
 
     def _build_performance(self) -> QWidget:
         """Full-width diagnostics bar at the bottom."""
@@ -450,9 +532,30 @@ class SettingsPanel(QWidget):
         label = port_name or ('OK' if connected else 'Error')
         self._midi_val.setText(label[:22] + ('…' if len(label) > 22 else ''))
 
-    def set_dmx_status(self, detail: str = 'Not connected'):
-        self._dmx_dot.setStyleSheet(_IND_NA)
-        self._dmx_val.setText(detail)
+    def set_dmx_status(self, state: str = 'off', detail: str = 'Off'):
+        """state: a DMXOutput status — 'off' | 'sending' | 'warning' | 'error'.
+        Long details are shortened; the full text is in the tooltip."""
+        self._dmx_dot.setStyleSheet(_DMX_DOTS[state])
+        self._dmx_val.setText(detail[:22] + ('…' if len(detail) > 22 else ''))
+        self._dmx_val.setToolTip(detail)
+
+    def set_control_mode(self, mode: str):
+        _select_data(self._mode_combo, mode)
+
+    def set_dmx_node(self, ip: str, port_address: list[int]):
+        """Show a node IP and [net, subnet, universe]; emits dmx_node_changed
+        if they differ from the current values. An invalid IP is ignored."""
+        if is_ipv4(ip):
+            self._node_ip_edit.setText(ip)
+        for spin, value in zip(self._port_spins, port_address, strict=True):
+            spin.blockSignals(True)          # one emit for all three, below
+            spin.setValue(value)
+            spin.blockSignals(False)
+        self._emit_dmx_node()
+
+    def set_dmx_tester_enabled(self, enabled: bool):
+        self._tester_btn.setEnabled(enabled)
+        self._tester_btn.setToolTip(_TESTER_TIP_ON if enabled else _TESTER_TIP_OFF)
 
     def set_audio_devices(self, devices: list[tuple[int, str]], current_index: int):
         """devices are (PyAudio index, name); an unknown current selects the first."""
@@ -498,3 +601,19 @@ class SettingsPanel(QWidget):
     def _on_smooth_changed(self, val: int):
         self._smooth_readout.setText(f'{val / 100.0:.1f}')
         self.smoothing_changed.emit(val / 100.0)
+
+    def _on_node_ip_edited(self):
+        if is_ipv4(self._node_ip_edit.text()):
+            self._emit_dmx_node()
+        else:                                # e.g. '10.201.6' — put the last good address back
+            self._node_ip_edit.setText(self._dmx_node[0])
+
+    def _emit_dmx_node(self):
+        """Emit dmx_node_changed if the shown values differ from the last
+        emitted ones (an IP still being typed counts as unchanged)."""
+        text = self._node_ip_edit.text()
+        ip = text if is_ipv4(text) else self._dmx_node[0]
+        node = (ip, [spin.value() for spin in self._port_spins])
+        if node != self._dmx_node:
+            self._dmx_node = node
+            self.dmx_node_changed.emit(*node)

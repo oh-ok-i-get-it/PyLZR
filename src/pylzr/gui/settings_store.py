@@ -1,12 +1,10 @@
-import ipaddress
-
 from PyQt5.QtCore import QSettings
 
 from ..core import (
     AVG_COUNT_RATE_DEFAULT, CONTROL_MODES, DEFAULT_HIGH_THRESHOLDS, DEFAULT_LOW_THRESHOLDS,
     DMX_DEFAULT_NODE_IP,
 )
-from ..dmx import PortAddress
+from ..dmx import PortAddress, is_ipv4
 
 # key -> default. Sound mode is deliberately not saved: the app always starts
 # with it off.
@@ -26,14 +24,6 @@ DEFAULTS = {
 }
 
 
-def _is_ipv4(value: str) -> bool:
-    try:
-        ipaddress.IPv4Address(value)
-        return True
-    except ValueError:
-        return False
-
-
 def _is_port_address(values: list[int]) -> bool:
     try:
         PortAddress(*values)
@@ -47,7 +37,7 @@ def _is_port_address(values: list[int]) -> bool:
 # unreadable ones.
 _VALID = {
     'app/control_mode': lambda mode: mode in CONTROL_MODES,
-    'dmx/node_ip':      _is_ipv4,
+    'dmx/node_ip':      is_ipv4,
     'dmx/port_address': _is_port_address,
 }
 
