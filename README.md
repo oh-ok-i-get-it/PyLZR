@@ -24,6 +24,8 @@ pylzr/
 ├── uv.lock                  # Exact dependency versions tested in CI (all OSes)
 ├── requirements.txt         # The same versions exported from uv.lock, for pip
 ├── .python-version          # Python version uv uses (3.12)
+├── install.ps1              # Automatic installer for Windows
+├── install.sh               # Automatic installer for macOS/Linux
 ├── docs/                    # Historical notes (original v0.3 README)
 ├── tests/                   # pytest suite (fake audio/MIDI/network, runs offscreen)
 ├── src/
@@ -41,9 +43,49 @@ pylzr/
 
 ## Installation
 
-PyLZR is run with **[uv](https://docs.astral.sh/uv/)**, a tool that sets up the right Python version and all of PyLZR's packages in a private folder (`.venv`) and starts the app. The same command works on Windows, macOS and Linux. (Prefer plain `pip`? See [Without uv](#without-uv-pip).)
+There are two ways to install PyLZR, and both give you the same thing: the exact package versions tested in CI, set up by **[uv](https://docs.astral.sh/uv/)** (a tool that installs the right Python version and PyLZR's packages into a private `.venv` folder).
 
-### 1. Install the prerequisites
+- **[Automatic install](#automatic-install)**: one command installs everything, adds PyLZR to your app menu and Desktop, and updates it later. Recommended if you just want to use PyLZR.
+- **[Manual install](#manual-install)**: the same steps by hand. Useful for development, or if you'd rather see each step. (Prefer plain `pip`? See [Without uv](#without-uv-pip).)
+
+### Automatic install
+
+Open a terminal and paste the line for your system:
+
+- **Windows** (PowerShell):
+  ```powershell
+  irm https://raw.githubusercontent.com/oh-ok-i-get-it/PyLZR/main/install.ps1 | iex
+  ```
+- **macOS / Linux** (Terminal):
+  ```bash
+  curl -LsSf https://raw.githubusercontent.com/oh-ok-i-get-it/PyLZR/main/install.sh | bash
+  ```
+
+The installer:
+1. **Installs what's missing, after asking you once:** uv and Python 3.12 on Windows; Xcode Command Line Tools, Homebrew, PortAudio and uv on macOS; PortAudio, a C compiler and uv on Linux (apt or dnf; you may be asked for your password).
+2. **Downloads PyLZR** (with Git if you have it, otherwise as an archive) into a per-user folder: `%LOCALAPPDATA%\PyLZR` on Windows, `~/Library/Application Support/PyLZR` on macOS, `~/.local/share/pylzr` on Linux.
+3. **Installs PyLZR's packages** with `uv sync --locked`.
+4. **Adds launchers:** a **PyLZR** entry in the Start Menu / Applications / app menu, a **Desktop** shortcut, and a **`pylzr`** command for new terminals (Windows adds `%LOCALAPPDATA%\PyLZR\bin` to your user PATH; macOS/Linux link `~/.local/bin/pylzr`). On Windows, PyLZR opens without a console window; on macOS, the PyLZR app asks for microphone access in its own name.
+
+**Update:** run the same command again. **Uninstall:** run it with the uninstall option (below). This removes the launchers and the downloaded copy; uv, Python, system packages and your saved settings are kept.
+
+To pass options to the one-liner (`-Uninstall`, `-Yes` to skip the question, `-NoLaunchers` to skip the menu entry, Desktop shortcut and command):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/oh-ok-i-get-it/PyLZR/main/install.ps1))) -Uninstall
+```
+```bash
+curl -LsSf https://raw.githubusercontent.com/oh-ok-i-get-it/PyLZR/main/install.sh | bash -s -- --uninstall
+```
+(macOS/Linux options: `--uninstall`, `--yes`, `--no-launchers`.)
+
+**Already cloned PyLZR?** Run the installer from your clone instead (`powershell -ExecutionPolicy Bypass -File install.ps1` or `bash install.sh`). It then uses your clone rather than downloading a copy, and keeps any extra packages (like the dev tools) in your `.venv`.
+
+These one-liners run a script straight from GitHub. You can read exactly what they do first: [`install.ps1`](install.ps1) (Windows), [`install.sh`](install.sh) (macOS/Linux).
+
+### Manual install
+
+#### 1. Install the prerequisites
 
 - **Windows** (PowerShell or Command Prompt):
   ```powershell
@@ -64,7 +106,7 @@ PyLZR is run with **[uv](https://docs.astral.sh/uv/)**, a tool that sets up the 
 
 On macOS and Linux, PyAudio (audio input) is compiled on first install, which is why PortAudio and a C compiler are needed. On Windows it comes ready-made.
 
-### 2. Get PyLZR
+#### 2. Get PyLZR
 
 ```bash
 git clone https://github.com/oh-ok-i-get-it/PyLZR.git
@@ -73,7 +115,7 @@ cd PyLZR
 
 No Git? Use **Code → Download ZIP** on the GitHub page, unzip it, and open a terminal in that folder.
 
-### 3. Run it
+#### 3. Run it
 
 ```bash
 uv run pylzr
@@ -125,6 +167,7 @@ CFLAGS="-I$(brew --prefix)/include" LDFLAGS="-L$(brew --prefix)/lib" .venv/bin/p
 | `requires a different Python: 3.13…` (or newer) | PyLZR needs Python 3.11 or 3.12. With uv this is automatic; with pip, create `.venv` with 3.12 as shown above. |
 | `An Application Control policy has blocked this file` (Windows) | Your PC blocks uv's downloaded Python. Install Python 3.12 from python.org (or `py install 3.12`), run `uv python uninstall 3.12`, then `uv run pylzr` again. |
 | `invalid peer certificate: UnknownIssuer` | Your network (school/work) inspects HTTPS. Run `uv run --system-certs pylzr`, or set the environment variable `UV_SYSTEM_CERTS=1`. |
+| Installer: `... was installed but is not on PATH yet` | Open a new terminal and run the installer again; it carries on where it stopped. |
 | `portaudio.h` file not found | Install PortAudio and a C compiler (step 1), then run again. |
 | Linux: `Could not load the Qt platform plugin "xcb"` | `sudo apt install libxcb-xinerama0 libxkbcommon-x11-0` |
 
