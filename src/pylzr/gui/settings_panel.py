@@ -156,6 +156,13 @@ def _fill_combo(combo: QComboBox, items: list[tuple[str, object]],
     combo.blockSignals(False)
 
 
+def _select_data(combo: QComboBox, value: object):
+    """Select the item whose value is `value` (emits if the selection changes)."""
+    row = combo.findData(value)
+    if row >= 0:
+        combo.setCurrentIndex(row)
+
+
 # ── Main class ────────────────────────────────────────────────────────────────
 
 class SettingsPanel(QWidget):
@@ -173,6 +180,11 @@ class SettingsPanel(QWidget):
         log_level_changed(str)     — 'debug' | 'info' | 'quiet'
         app_sm_toggled()
         control_mode_changed(str)  — 'MIDI' | 'DMX'
+        reset_requested()          — 'Reset to defaults' clicked
+        audio_devices_refresh_requested() — ↻ next to the input device clicked
+
+    The set_*() setters change a control as if the user had, emitting its
+    signal when the value changes (used to restore saved settings).
     """
 
     audio_device_changed = pyqtSignal(int)
@@ -183,6 +195,8 @@ class SettingsPanel(QWidget):
     log_level_changed    = pyqtSignal(str)
     app_sm_toggled       = pyqtSignal()
     control_mode_changed = pyqtSignal(str)
+    reset_requested      = pyqtSignal()
+    audio_devices_refresh_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -290,9 +304,22 @@ class SettingsPanel(QWidget):
 
         v.addWidget(_section('AUDIO'))
 
-        # Device dropdown (filled by set_audio_devices)
+        # Device dropdown (filled by set_audio_devices) + rescan button
         self._device_combo = self._dropdown(self.audio_device_changed, placeholder='No devices found')
-        v.addLayout(_labeled_control('Device', None, self._device_combo))
+        self._rescan_btn = QPushButton('↻')
+        self._rescan_btn.setFixedSize(24, 22)
+        self._rescan_btn.setStyleSheet(_SM_STYLE)
+        self._rescan_btn.setToolTip('Rescan audio inputs (briefly pauses audio)')
+        self._rescan_btn.clicked.connect(lambda: self.audio_devices_refresh_requested.emit())
+        device_row = QHBoxLayout()
+        device_row.setContentsMargins(0, 0, 0, 0)
+        device_row.setSpacing(4)
+        device_row.addWidget(self._device_combo, stretch=1)
+        device_row.addWidget(self._rescan_btn)
+        device_widget = QWidget()
+        device_widget.setStyleSheet('background:transparent;')
+        device_widget.setLayout(device_row)
+        v.addLayout(_labeled_control('Device', None, device_widget))
 
         # Gain slider
         self._gain_readout = QLabel('100%')
@@ -363,6 +390,14 @@ class SettingsPanel(QWidget):
         sm_row.addWidget(self._sm_btn)
         sm_row.addStretch(1)
         v.addLayout(sm_row)
+
+        # Reset saved settings
+        self._reset_btn = QPushButton('Reset to defaults')
+        self._reset_btn.setFixedHeight(22)
+        self._reset_btn.setStyleSheet(_SM_STYLE)
+        self._reset_btn.setToolTip('Restore every setting (cutoffs, rate, gain, devices, …) to its default.')
+        self._reset_btn.clicked.connect(lambda: self.reset_requested.emit())
+        v.addWidget(self._reset_btn)
 
         v.addStretch(1)
         return _pad(v, l=10, r=14)
@@ -435,6 +470,18 @@ class SettingsPanel(QWidget):
     def set_diagnostics(self, fps: float, overflows: int):
         self._diag_fps.setText(f'{fps:.0f} fps')
         self._diag_overflow.setText(str(overflows))
+
+    def set_gain(self, gain: float):
+        self._gain_slider.setValue(round(gain * 100))
+
+    def set_smoothing(self, value: float):
+        self._smooth_slider.setValue(round(value * 100))
+
+    def set_fft_window(self, name: str):
+        _select_data(self._window_combo, name)
+
+    def set_log_level(self, level: str):
+        _select_data(self._log_combo, level)
 
     def sync_sound_mode(self, is_on: bool):
         self._sm_btn.blockSignals(True)

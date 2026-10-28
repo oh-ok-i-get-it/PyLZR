@@ -12,7 +12,7 @@ def test_importing_package_is_lightweight():
     interpreter, since this test process has already imported them."""
     code = (
         'import json, sys, pylzr; '
-        'print(json.dumps({"heavy": [m for m in ("PyQt5", "pyaudio", "rtmidi", "scipy") if m in sys.modules], '
+        'print(json.dumps({"heavy": [m for m in ("PyQt5", "pyaudio", "rtmidi", "numpy") if m in sys.modules], '
         '"version": pylzr.__version__}))'
     )
     env = {**os.environ, 'PYTHONPATH': str(SRC)}

@@ -71,6 +71,12 @@ class SoundMode:
         log.info(f'SoundMode: LOW={lm} HIGH={hm} | DualMode={mode_label} | MIDI={note}',
                  extra={'tone': Tone.MODE})
 
+    def reset(self):
+        """Forget the last mode so the next check_mode() sends a note even if
+        the mode is unchanged (e.g. after manual keyboard cues)."""
+        self.low_mode  = -1
+        self.high_mode = -1
+
     def check_mode(self, low_avg: float, high_avg: float):
         prev = (self.low_mode, self.high_mode)
         self.set_mode(low_avg, high_avg)

@@ -1,7 +1,11 @@
 """AudioEngine used on its own, without any window."""
 
+import threading
+
+import numpy as np
 import pyaudio as fake_pyaudio
 import pytest
+from PyQt5.QtCore import Qt
 
 from pylzr.engine import AudioEngine
 
@@ -22,18 +26,20 @@ def engine(qapp):
     eng = AudioEngine(output)
     eng.output = output                     # for the tests' convenience
     eng.frames, eng.averages, eng.levels = [], [], []
-    eng.spectrum_ready.connect(lambda *bands: eng.frames.append(bands))
+    eng.spectrum_ready.connect(eng.frames.append)
     eng.averages_ready.connect(lambda lo, hi: eng.averages.append((lo, hi)))
     eng.level_measured.connect(lambda peak, clip: eng.levels.append((peak, clip)))
+    eng.diagnostics = []
+    eng.diagnostics_updated.connect(lambda fps, overflows: eng.diagnostics.append((fps, overflows)))
+    eng.start()
     yield eng
     eng.shutdown()
 
 
-def feed(engine, chunks):
+def feed(engine, chunks, overflow=False):
     target = len(engine.frames) + len(chunks)
     for chunk in chunks:
-        fake_pyaudio.queue.append(chunk.tobytes())
-        engine.tick()
+        fake_pyaudio.deliver(chunk.tobytes(), overflow=overflow)
     wait_until(lambda: len(engine.frames) >= target)
 
 
@@ -79,19 +85,71 @@ def test_gain_scales_input(engine):
 
 def test_failed_device_switch_keeps_running(engine):
     fake_pyaudio.fail_open.add(1)
-    engine.start()
     assert engine.switch_device(1) is False
     assert engine.audio.device_name == 'Fake Mic'
-    assert engine._capture_timer.isActive()
+    assert engine.audio.is_active
     engine.stop()
     assert engine.switch_device(0) is True
-    assert not engine._capture_timer.isActive()     # stays stopped if it was stopped
+    assert not engine.audio.is_active               # stays stopped if it was stopped
+
+
+def test_stop_and_start(engine):
+    engine.stop()
+    assert not engine.audio.is_active
+    engine.start()
+    feed(engine, tone_chunks(1, (440, 1000)))
+    assert len(engine.frames) == 1
+
+
+def test_overflows_are_counted_and_reported(engine, caplog):
+    feed(engine, tone_chunks(3, (440, 1000)), overflow=True)
+    feed(engine, tone_chunks(2, (440, 1000)))
+    with caplog.at_level('WARNING', logger='pylzr'):
+        engine._report_diagnostics()             # the 1 s diagnostics tick
+        engine._report_diagnostics()
+    assert [fps_overflows[1] for fps_overflows in engine.diagnostics] == [3, 3]   # running total
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == 'WARNING']
+    assert warnings == ['Audio input overflowed 3× in the last second']           # once, not every tick
+
+
+def test_chunks_from_the_audio_thread_are_processed_in_order(engine):
+    """PortAudio calls back on its own thread; processing must stay ordered
+    and happen on the engine's thread."""
+    engine.measure_level = True
+    amplitudes = [1000 * (i + 1) for i in range(10)]
+    threads = set()
+    # DirectConnection: record the thread that actually emits (i.e. that processed the chunk)
+    engine.level_measured.connect(lambda *_: threads.add(threading.get_ident()), Qt.DirectConnection)
+
+    def audio_thread():
+        for amp in amplitudes:
+            fake_pyaudio.deliver(np.full(engine.audio.chunk, amp, dtype=np.int16).tobytes())
+
+    worker = threading.Thread(target=audio_thread)
+    worker.start()
+    worker.join()
+    wait_until(lambda: len(engine.levels) == len(amplitudes))
+    assert [round(peak * 32767) for peak, _ in engine.levels] == amplitudes
+    assert threads == {threading.get_ident()}       # processed on this (GUI) thread, not the audio thread
 
 
 def test_shutdown_stops_everything_and_is_idempotent(engine):
-    engine.start()
     engine.shutdown()
     assert fake_pyaudio.streams[-1].closed
     assert engine.fft_thread.isFinished()
-    assert not engine._capture_timer.isActive()
     engine.shutdown()      # second call is a no-op (the fixture calls it again too)
+
+
+def test_turning_sound_mode_on_sends_current_cue_at_once(engine):
+    feed(engine, tone_chunks(20, (80, 400)))          # analysed while off: LOW 2 / HIGH 0
+    assert engine.output.notes == []
+    engine.set_sound_mode(True)
+    assert engine.output.notes == [82]                # no need to wait for the next window
+    engine.set_sound_mode(False)
+    engine.set_sound_mode(True)
+    assert engine.output.notes == [82, 82]            # re-sent even though the mode is unchanged
+
+
+def test_turning_sound_mode_on_before_any_audio_sends_nothing(engine):
+    engine.set_sound_mode(True)
+    assert engine.output.notes == []

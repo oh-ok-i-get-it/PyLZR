@@ -33,6 +33,7 @@ EXPECTED_NOTES = [
     77,    # 8 kHz               -> 0 / 3
     89,    # both                -> 3 / 3   (repeat window sends nothing)
     73,    # 'q' pressed with sound mode off
+    106,   # sound mode back on: current cue (last window was silence) sent at once
     82,    # quiet low, gain x2  -> 2 / 0
     78,    # Hann window         -> 1 / 0
     89,    # Hann, both loud     -> 3 / 3
@@ -99,7 +100,7 @@ def assert_close_to_golden(actual, golden, scale: float = 1e-5):
     """Compare a table of floats with its golden values, column by column.
 
     The FFT runs in float32, and its rounding differs slightly between
-    SciPy/NumPy versions and CPU types (e.g. Apple Silicon vs x86). That noise
+    NumPy versions and CPU types (e.g. Apple Silicon vs x86). That noise
     is absolute (~1e-5 seen in CI), so it can be large *relative* to small
     values like a band's leakage during a pure tone. Each column therefore
     allows an absolute error of `scale` x its largest golden value: far above

@@ -29,7 +29,7 @@ def _install_fake(name: str):
 fake_rtmidi  = _install_fake('rtmidi')
 fake_pyaudio = _install_fake('pyaudio')
 
-from PyQt5.QtCore import QCoreApplication, QEvent  # noqa: E402
+from PyQt5.QtCore import QCoreApplication, QEvent, QSettings  # noqa: E402
 from PyQt5.QtWidgets import QApplication            # noqa: E402
 
 from helpers import WindowHarness                  # noqa: E402
@@ -41,10 +41,13 @@ def qapp():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_state():
-    """Every test starts on a simulated macOS with default devices."""
+def _fresh_state(tmp_path):
+    """Every test starts on a simulated macOS with default devices and no
+    saved settings (QSettings points at a fresh temp folder, never at the
+    real user config)."""
     fake_rtmidi.reset('mac')
     fake_pyaudio.reset()
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / 'config'))
 
 
 @pytest.fixture(params=['win', 'mac'])
