@@ -7,8 +7,11 @@ __pycache__/
 # Ignore venv
 .venv/
 
+# Ignore build artifacts
+*.egg-info/
+build/
+dist/
 
-
-
-# Ignore pytest cache
+# Ignore tool caches
 .pytest_cache/
+.ruff_cache/

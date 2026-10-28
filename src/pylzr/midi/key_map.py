@@ -1,82 +1,36 @@
+from PyQt5.QtCore import Qt
 from ..core import text_styles as txt
 from ..core.app_logger import logger
 
-# Maps Qt key codes to MIDI note numbers (60 = C3, sequential from there).
-_KEY_TO_MIDI = {
-    49: 60,        # 1
-    50: 61,        # 2
-    51: 62,        # 3
-    52: 63,        # 4
-    53: 64,        # 5
-    54: 65,        # 6
-    55: 66,        # 7
-    56: 67,        # 8
-    57: 68,        # 9
-    48: 69,        # 0
-    45: 70,        # -
-    61: 71,        # =
-    16777217: 72,  # TAB
-    81: 73,        # q
-    87: 74,        # w
-    69: 75,        # e
-    82: 76,        # r
-    84: 77,        # t
-    89: 78,        # y
-    85: 79,        # u
-    73: 80,        # i
-    79: 81,        # o
-    80: 82,        # p
-    91: 83,        # [
-    93: 84,        # ]
-    65: 85,        # a
-    83: 86,        # s
-    68: 87,        # d
-    70: 88,        # f
-    71: 89,        # g
-    72: 90,        # h
-    74: 91,        # j
-    75: 92,        # k
-    76: 93,        # l
-    59: 94,        # ;
-    39: 95,        # '
-    90: 96,        # z
-    88: 97,        # x
-    67: 98,        # c
-    86: 99,        # v
-    66: 100,       # b
-    78: 101,       # n
-    77: 102,       # m
-    44: 103,       # ,
-    46: 104,       # .
-    47: 105,       # /
-    32: 106,       # SPACE
-    16777220: 107, # ENTER
-    16777248: 108, # L_SHIFT
-}
+_FIRST_NOTE = 60  # C3
 
-_KEY_NAMES = {
-    49: '1',  50: '2',  51: '3',  52: '4',  53: '5',
-    54: '6',  55: '7',  56: '8',  57: '9',  48: '0',
-    45: '-',  61: '=',  16777217: 'TAB',
-    81: 'q',  87: 'w',  69: 'e',  82: 'r',  84: 't',
-    89: 'y',  85: 'u',  73: 'i',  79: 'o',  80: 'p',
-    91: '[',  93: ']',
-    65: 'a',  83: 's',  68: 'd',  70: 'f',  71: 'g',
-    72: 'h',  74: 'j',  75: 'k',  76: 'l',
-    59: ';',  39: "'",
-    90: 'z',  88: 'x',  67: 'c',
-    86: 'v',  66: 'b',  78: 'n',  77: 'm',
-    44: ',',  46: '.',  47: '/',
-    32: 'SPACE', 16777220: 'ENTER', 16777248: 'L_SHIFT',
-}
+# Keyboard keys in note order: the first key sends _FIRST_NOTE, each next key
+# one semitone higher (60 → 107). Shift is not here: the main window uses it
+# to toggle sound mode.
+_KEYS = [
+    (Qt.Key_1, '1'), (Qt.Key_2, '2'), (Qt.Key_3, '3'), (Qt.Key_4, '4'), (Qt.Key_5, '5'),
+    (Qt.Key_6, '6'), (Qt.Key_7, '7'), (Qt.Key_8, '8'), (Qt.Key_9, '9'), (Qt.Key_0, '0'),
+    (Qt.Key_Minus, '-'), (Qt.Key_Equal, '='), (Qt.Key_Tab, 'TAB'),
+    (Qt.Key_Q, 'q'), (Qt.Key_W, 'w'), (Qt.Key_E, 'e'), (Qt.Key_R, 'r'), (Qt.Key_T, 't'),
+    (Qt.Key_Y, 'y'), (Qt.Key_U, 'u'), (Qt.Key_I, 'i'), (Qt.Key_O, 'o'), (Qt.Key_P, 'p'),
+    (Qt.Key_BracketLeft, '['), (Qt.Key_BracketRight, ']'),
+    (Qt.Key_A, 'a'), (Qt.Key_S, 's'), (Qt.Key_D, 'd'), (Qt.Key_F, 'f'), (Qt.Key_G, 'g'),
+    (Qt.Key_H, 'h'), (Qt.Key_J, 'j'), (Qt.Key_K, 'k'), (Qt.Key_L, 'l'),
+    (Qt.Key_Semicolon, ';'), (Qt.Key_Apostrophe, "'"),
+    (Qt.Key_Z, 'z'), (Qt.Key_X, 'x'), (Qt.Key_C, 'c'), (Qt.Key_V, 'v'),
+    (Qt.Key_B, 'b'), (Qt.Key_N, 'n'), (Qt.Key_M, 'm'),
+    (Qt.Key_Comma, ','), (Qt.Key_Period, '.'), (Qt.Key_Slash, '/'),
+    (Qt.Key_Space, 'SPACE'), (Qt.Key_Return, 'ENTER'),
+]
+
+# Qt key code -> (MIDI note, display name)
+_KEY_TO_NOTE = {int(key): (_FIRST_NOTE + i, name) for i, (key, name) in enumerate(_KEYS)}
 
 
 class KeyboardMapper:
     """Routes Qt key codes to MIDI notes via a static lookup table.
 
     handle_key() is a no-op when sound mode is active (midi_out.sm_ON).
-    Left Shift (16777248) is intentionally excluded from routing here —
-    it is intercepted upstream in the main window to toggle sound mode.
     """
 
     def __init__(self, midi_out):
@@ -85,9 +39,9 @@ class KeyboardMapper:
     def handle_key(self, key_num: int):
         if self._midi.sm_ON:
             return
-        note = _KEY_TO_MIDI.get(key_num)
-        if note is not None:
-            name = _KEY_NAMES.get(key_num, str(key_num))
+        mapping = _KEY_TO_NOTE.get(key_num)
+        if mapping is not None:
+            note, name = mapping
             print(
                 txt.B + txt.CYANB + txt.BLACK + 'Pressed:' +
                 txt.RESET + txt.CYAN + txt.B + f' {name}' + txt.RESET

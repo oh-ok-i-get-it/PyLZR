@@ -3,6 +3,8 @@ from PyQt5.QtWidgets import (
     QFrame, QSlider, QPushButton, QProgressBar,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from ..analysis import FFTWorker
+from . import theme
 
 _W = 560  # panel width — wide enough for 3 columns
 
@@ -10,11 +12,11 @@ _PANEL_STYLE = (
     'QWidget#SettingsPanel {'
     '  background: #111111;'
     '  border: 1px solid #333333;'
-    '  border-top: 2px solid #58a6ff;'
+    f'  border-top: 2px solid {theme.ACCENT};'
     '}'
 )
 
-_SECTION_STYLE = 'color: #58a6ff; font-size: 9px; font-weight: bold; letter-spacing: 0.08em;'
+_SECTION_STYLE = f'color: {theme.ACCENT}; font-size: 9px; font-weight: bold; letter-spacing: 0.08em;'
 _LABEL_STYLE   = 'color: #666666; font-size: 10px;'
 _VALUE_STYLE   = 'color: #c9d1d9; font-size: 10px;'
 _READOUT_STYLE = 'color: #8a8a8a; font-size: 10px;'
@@ -26,7 +28,7 @@ _COMBO_STYLE = (
     '  border: 1px solid #2e2e2e; border-radius: 3px;'
     '  padding: 3px 7px; font-size: 10px;'
     '}'
-    'QComboBox:hover { border-color: #58a6ff; }'
+    f'QComboBox:hover {{ border-color: {theme.ACCENT}; }}'
     'QComboBox::drop-down { border: none; width: 14px; }'
     'QComboBox QAbstractItemView {'
     '  background: #1a1a1a; color: #c9d1d9;'
@@ -37,7 +39,7 @@ _COMBO_STYLE = (
 _SLIDER_STYLE = (
     'QSlider::groove:horizontal { background: #2a2a2a; height: 4px; border-radius: 2px; }'
     'QSlider::handle:horizontal {'
-    '  background: #58a6ff; width: 10px; height: 10px;'
+    f'  background: {theme.ACCENT}; width: 10px; height: 10px;'
     '  margin: -3px 0; border-radius: 5px;'
     '}'
     'QSlider::sub-page:horizontal { background: #3a5a8a; border-radius: 2px; }'
@@ -50,7 +52,7 @@ _LEVEL_STYLE = (
     '}'
     'QProgressBar::chunk {'
     '  background: qlineargradient(x1:0,y1:0,x2:1,y2:0,'
-    '    stop:0 #2ecc71, stop:0.6 #f39c12, stop:1 #e74c3c);'
+    f'    stop:0 {theme.OK}, stop:0.6 #f39c12, stop:1 {theme.ERROR});'
     '  border-radius: 2px;'
     '}'
 )
@@ -60,17 +62,20 @@ _SM_STYLE = (
     '  background:#1e1e1e; color:#666; font-size:10px;'
     '  border:1px solid #2e2e2e; border-radius:3px; padding:3px 10px;'
     '}'
-    'QPushButton:checked { background:#0f3d1a; color:#2ecc71; border-color:#2ecc71; }'
-    'QPushButton:hover   { border-color:#58a6ff; }'
+    f'QPushButton:checked {{ background:#0f3d1a; color:{theme.OK}; border-color:{theme.OK}; }}'
+    f'QPushButton:hover   {{ border-color:{theme.ACCENT}; }}'
 )
 
-_IND_ON      = 'border-radius:5px; background:#2ecc71;'
-_IND_OFF     = 'border-radius:5px; background:#e74c3c;'
+_IND_ON      = f'border-radius:5px; background:{theme.OK};'
+_IND_OFF     = f'border-radius:5px; background:{theme.ERROR};'
 _IND_NA      = 'border-radius:5px; background:#383838;'
-_CLIP_ON     = 'border-radius:3px; background:#e74c3c; font-size:8px; color:#fff; padding:1px 3px;'
+_CLIP_ON     = f'border-radius:3px; background:{theme.ERROR}; font-size:8px; color:#fff; padding:1px 3px;'
 _CLIP_OFF    = 'border-radius:3px; background:#252525; font-size:8px; color:#444; padding:1px 3px;'
-_HDIV_STYLE  = 'background:#1e1e1e; border:none;'
-_VDIV_STYLE  = 'background:#1e1e1e; border:none;'
+_DIV_STYLE   = 'background:#1e1e1e; border:none;'
+
+# (label, value) choices for the fixed dropdowns
+_LOG_LEVELS    = [('Info', 'info'), ('Debug', 'debug'), ('Quiet', 'quiet')]
+_CONTROL_MODES = [('MIDI', 'MIDI'), ('DMX  (coming soon)', 'DMX')]
 
 
 # ── Small helpers ─────────────────────────────────────────────────────────────
@@ -83,32 +88,28 @@ def _dot() -> QLabel:
 
 
 def _lbl(text: str, style: str = _LABEL_STYLE) -> QLabel:
-    l = QLabel(text)
-    l.setStyleSheet(style)
-    return l
+    label = QLabel(text)
+    label.setStyleSheet(style)
+    return label
 
 
 def _section(text: str) -> QLabel:
     return _lbl(text, _SECTION_STYLE)
 
 
-def _hdivider() -> QFrame:
+def _divider(shape: QFrame.Shape) -> QFrame:
+    """1px line: QFrame.HLine (horizontal) or QFrame.VLine (vertical)."""
     f = QFrame()
-    f.setFrameShape(QFrame.HLine)
-    f.setFixedHeight(1)
-    f.setStyleSheet(_HDIV_STYLE)
+    f.setFrameShape(shape)
+    if shape == QFrame.HLine:
+        f.setFixedHeight(1)
+    else:
+        f.setFixedWidth(1)
+    f.setStyleSheet(_DIV_STYLE)
     return f
 
 
-def _vdivider() -> QFrame:
-    f = QFrame()
-    f.setFrameShape(QFrame.VLine)
-    f.setFixedWidth(1)
-    f.setStyleSheet(_VDIV_STYLE)
-    return f
-
-
-def _pad(layout, t=8, r=12, b=8, l=12) -> QWidget:
+def _pad(layout, t=8, r=12, b=8, l=12) -> QWidget:  # noqa: E741 — top/right/bottom/left
     """Wrap a layout in a transparent widget with padding."""
     w = QWidget()
     w.setStyleSheet('background:transparent;')
@@ -138,13 +139,20 @@ def _labeled_control(label_text: str, readout: QLabel | None,
     return v
 
 
-def _fill_combo(combo: QComboBox, labels: list[str], selected_row: int):
-    """Replace combo items (long names truncated) without emitting signals."""
+def _fill_combo(combo: QComboBox, items: list[tuple[str, object]],
+                current: object = None, fallback_row: int = -1):
+    """Replace combo items without emitting signals.
+
+    items are (label, value) pairs; each value is stored on its item and read
+    back with combo.itemData(). Long labels are truncated for display. Selects
+    the item whose value == current, else fallback_row (-1 = none).
+    """
     combo.blockSignals(True)
     combo.clear()
-    for name in labels:
-        combo.addItem(name if len(name) <= 32 else name[:30] + '…')
-    combo.setCurrentIndex(selected_row)
+    for label, value in items:
+        combo.addItem(label if len(label) <= 32 else label[:30] + '…', value)
+    row = combo.findData(current) if current is not None else -1
+    combo.setCurrentIndex(row if row >= 0 else fallback_row)
     combo.blockSignals(False)
 
 
@@ -182,8 +190,6 @@ class SettingsPanel(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(_PANEL_STYLE)
         self.setFixedWidth(_W)
-        self._device_list: list[tuple[int, str]] = []
-        self._midi_ports:  list[str] = []
         self._build()
         self.adjustSize()
 
@@ -195,9 +201,9 @@ class SettingsPanel(QWidget):
         root.setSpacing(0)
 
         root.addWidget(self._build_top())
-        root.addWidget(_hdivider())
+        root.addWidget(_divider(QFrame.HLine))
         root.addWidget(self._build_columns())
-        root.addWidget(_hdivider())
+        root.addWidget(_divider(QFrame.HLine))
         root.addWidget(self._build_performance())
 
     def _build_top(self) -> QWidget:
@@ -268,9 +274,9 @@ class SettingsPanel(QWidget):
         h.setSpacing(0)
 
         h.addWidget(self._build_audio_col(),    stretch=1)
-        h.addWidget(_vdivider())
+        h.addWidget(_divider(QFrame.VLine))
         h.addWidget(self._build_analysis_col(), stretch=1)
-        h.addWidget(_vdivider())
+        h.addWidget(_divider(QFrame.VLine))
         h.addWidget(self._build_app_col(),      stretch=1)
 
         w = QWidget()
@@ -284,11 +290,8 @@ class SettingsPanel(QWidget):
 
         v.addWidget(_section('AUDIO'))
 
-        # Device dropdown
-        self._device_combo = QComboBox()
-        self._device_combo.setStyleSheet(_COMBO_STYLE)
-        self._device_combo.setPlaceholderText('No devices found')
-        self._device_combo.currentIndexChanged.connect(self._on_device_changed)
+        # Device dropdown (filled by set_audio_devices)
+        self._device_combo = self._dropdown(self.audio_device_changed, placeholder='No devices found')
         v.addLayout(_labeled_control('Device', None, self._device_combo))
 
         # Gain slider
@@ -311,11 +314,8 @@ class SettingsPanel(QWidget):
         v.addWidget(_section('ANALYSIS'))
 
         # Window function dropdown
-        self._window_combo = QComboBox()
-        self._window_combo.setStyleSheet(_COMBO_STYLE)
-        for name in ('Rectangle', 'Hann', 'Hamming', 'Blackman'):
-            self._window_combo.addItem(name)
-        self._window_combo.currentIndexChanged.connect(self._on_window_changed)
+        self._window_combo = self._dropdown(
+            self.fft_window_changed, [(name.capitalize(), name) for name in FFTWorker.WINDOW_NAMES])
         v.addLayout(_labeled_control('FFT Window', None, self._window_combo))
 
         # Smoothing slider
@@ -337,28 +337,17 @@ class SettingsPanel(QWidget):
 
         v.addWidget(_section('APP'))
 
-        # MIDI output port dropdown
-        self._midi_combo = QComboBox()
-        self._midi_combo.setStyleSheet(_COMBO_STYLE)
-        self._midi_combo.setPlaceholderText('No MIDI ports')
-        self._midi_combo.currentIndexChanged.connect(self._on_midi_port_changed)
+        # MIDI output port dropdown (filled by set_midi_ports)
+        self._midi_combo = self._dropdown(self.midi_port_changed, placeholder='No MIDI ports')
         v.addLayout(_labeled_control('MIDI Out', None, self._midi_combo))
 
         # Control Mode dropdown
-        self._mode_combo = QComboBox()
-        self._mode_combo.setStyleSheet(_COMBO_STYLE)
-        self._mode_combo.addItem('MIDI')
-        self._mode_combo.addItem('DMX  (coming soon)')
+        self._mode_combo = self._dropdown(self.control_mode_changed, _CONTROL_MODES)
         self._mode_combo.setToolTip('DMX output is not yet implemented.')
-        self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         v.addLayout(_labeled_control('Control Mode', None, self._mode_combo))
 
         # Log Level dropdown
-        self._log_combo = QComboBox()
-        self._log_combo.setStyleSheet(_COMBO_STYLE)
-        for lvl in ('Info', 'Debug', 'Quiet'):
-            self._log_combo.addItem(lvl)
-        self._log_combo.currentIndexChanged.connect(self._on_log_level_changed)
+        self._log_combo = self._dropdown(self.log_level_changed, _LOG_LEVELS)
         v.addLayout(_labeled_control('Log Level', None, self._log_combo))
 
         # Sound Mode toggle
@@ -384,7 +373,7 @@ class SettingsPanel(QWidget):
         h.setSpacing(24)
 
         h.addWidget(_section('PERFORMANCE'))
-        h.addWidget(_vdivider())
+        h.addWidget(_divider(QFrame.VLine))
 
         for attr, label in (('_diag_fps', 'FFT Rate'), ('_diag_overflow', 'Overflow')):
             col = QHBoxLayout()
@@ -399,6 +388,21 @@ class SettingsPanel(QWidget):
         h.addStretch(1)
         return _pad(h, t=7, b=9)
 
+    @staticmethod
+    def _dropdown(signal, items: list[tuple[str, object]] = (), placeholder: str = '') -> QComboBox:
+        """Styled combo of (label, value) items that emits signal(value) when
+        the user picks an item."""
+        combo = QComboBox()
+        combo.setStyleSheet(_COMBO_STYLE)
+        combo.setPlaceholderText(placeholder)
+        _fill_combo(combo, list(items), fallback_row=0)
+
+        def forward(row: int):
+            if row >= 0:
+                signal.emit(combo.itemData(row))
+        combo.currentIndexChanged.connect(forward)
+        return combo
+
     # ── Public setters ────────────────────────────────────────────────────
 
     def set_audio_status(self, connected: bool, detail: str = ''):
@@ -411,20 +415,18 @@ class SettingsPanel(QWidget):
         label = port_name or ('OK' if connected else 'Error')
         self._midi_val.setText(label[:22] + ('…' if len(label) > 22 else ''))
 
-    def set_dmx_status(self, connected: bool = False, detail: str = 'Not connected'):
+    def set_dmx_status(self, detail: str = 'Not connected'):
         self._dmx_dot.setStyleSheet(_IND_NA)
         self._dmx_val.setText(detail)
 
     def set_audio_devices(self, devices: list[tuple[int, str]], current_index: int):
-        self._device_list = devices
-        selected = next((row for row, (idx, _) in enumerate(devices) if idx == current_index), 0)
-        _fill_combo(self._device_combo, [name for _, name in devices], selected)
+        """devices are (PyAudio index, name); an unknown current selects the first."""
+        _fill_combo(self._device_combo, [(name, idx) for idx, name in devices],
+                    current_index, fallback_row=0)
 
     def set_midi_ports(self, ports: list[str], current: str | None):
         """current=None leaves nothing selected (no port open)."""
-        self._midi_ports = ports
-        selected = ports.index(current) if current in ports else -1
-        _fill_combo(self._midi_combo, ports, selected)
+        _fill_combo(self._midi_combo, [(port, port) for port in ports], current)
 
     def set_level(self, peak: float, clipping: bool = False):
         self._level_bar.setValue(int(peak * 100))
@@ -442,29 +444,10 @@ class SettingsPanel(QWidget):
 
     # ── Private signal handlers ───────────────────────────────────────────
 
-    def _on_device_changed(self, row: int):
-        if 0 <= row < len(self._device_list):
-            self.audio_device_changed.emit(self._device_list[row][0])
-
-    def _on_midi_port_changed(self, row: int):
-        if 0 <= row < len(self._midi_ports):
-            self.midi_port_changed.emit(self._midi_ports[row])
-
     def _on_gain_changed(self, val: int):
         self._gain_readout.setText(f'{val}%')
         self.audio_gain_changed.emit(val / 100.0)
 
-    def _on_window_changed(self, index: int):
-        self.fft_window_changed.emit(
-            ('rectangle', 'hann', 'hamming', 'blackman')[index]
-        )
-
     def _on_smooth_changed(self, val: int):
         self._smooth_readout.setText(f'{val / 100.0:.1f}')
         self.smoothing_changed.emit(val / 100.0)
-
-    def _on_log_level_changed(self, index: int):
-        self.log_level_changed.emit(('info', 'debug', 'quiet')[index])
-
-    def _on_mode_changed(self, index: int):
-        self.control_mode_changed.emit('MIDI' if index == 0 else 'DMX')

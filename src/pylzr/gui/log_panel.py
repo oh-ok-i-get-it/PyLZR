@@ -1,12 +1,14 @@
+from collections import deque
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextBlockFormat, QTextCursor
+from . import theme
 
 _BG_STYLE = 'QTextEdit {{ background-color: #1a1a1a; color: {fg}; border: 1px solid #333; }}'
 _DEFAULT_FG = '#d4d4d4'
 
-_AVG_LOW_COLOR  = '#d4a017'
-_AVG_HIGH_COLOR = '#9b59b6'
+_MAX_LOG_LINES = 2000   # oldest console lines are dropped beyond this
+_AVG_ROWS      = 10
 
 
 def _base_text_widget(height: int) -> QTextEdit:
@@ -30,6 +32,7 @@ class LogPanel(QWidget):
         layout.addWidget(QLabel('Console'))
         self._text = _base_text_widget(130)
         self._text.setStyleSheet(_BG_STYLE.format(fg=_DEFAULT_FG))
+        self._text.document().setMaximumBlockCount(_MAX_LOG_LINES)
         layout.addWidget(self._text)
         self.setLayout(layout)
 
@@ -54,11 +57,11 @@ class LogPanel(QWidget):
 
 
 class AvgPanel(QWidget):
-    """Scrolling display of the 10 most recent low/high windowed averages."""
+    """Scrolling display of the _AVG_ROWS most recent low/high windowed averages."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._entries: list[tuple[float, float]] = []
+        self._entries: deque[tuple[float, float]] = deque(maxlen=_AVG_ROWS)
         layout = QVBoxLayout()
         layout.setContentsMargins(4, 2, 4, 4)
         layout.setSpacing(2)
@@ -70,13 +73,11 @@ class AvgPanel(QWidget):
 
     def append_avgs(self, low_avg: float, high_avg: float):
         self._entries.append((low_avg, high_avg))
-        if len(self._entries) > 10:
-            self._entries.pop(0)
 
         lines = [
-            f'<span style="color:{_AVG_LOW_COLOR}">L {lo:>9.4f}</span>'
+            f'<span style="color:{theme.LOW_BAND}">L {lo:>9.4f}</span>'
             f'&nbsp;&nbsp;&nbsp;'
-            f'<span style="color:{_AVG_HIGH_COLOR}">H {hi:>9.4f}</span>'
+            f'<span style="color:{theme.HIGH_BAND}">H {hi:>9.4f}</span>'
             for lo, hi in self._entries
         ]
         self._text.setHtml(

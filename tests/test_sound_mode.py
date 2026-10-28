@@ -27,7 +27,7 @@ class RecordingOutput:
 
 def make_sound_mode(output, low=DEFAULT_CUTOFFS, high=DEFAULT_CUTOFFS, dm_toggle_rate=120):
     """Single construction point — update here if the constructor changes."""
-    return SoundMode(*low, *high, output, dm_toggle_rate=dm_toggle_rate)
+    return SoundMode(low, high, output, dm_toggle_rate=dm_toggle_rate)
 
 
 @pytest.mark.parametrize('value, mode', [
@@ -69,13 +69,13 @@ def test_note_sent_only_when_mode_pair_changes():
 
 def test_dual_mode_starts_on_and_toggles_after_rate():
     sm = make_sound_mode(RecordingOutput(), dm_toggle_rate=3)
-    assert sm.get_dm_mode_bool() is True
+    assert sm.dm_on is True
     assert sm.dm_countdown == 3
     sm.advance_dm_counter()
     sm.advance_dm_counter()
-    assert sm.dm_countdown == 1 and sm.get_dm_mode_bool() is True
+    assert sm.dm_countdown == 1 and sm.dm_on is True
     sm.advance_dm_counter()
-    assert sm.get_dm_mode_bool() is False and sm.dm_countdown == 3
+    assert sm.dm_on is False and sm.dm_countdown == 3
 
 
 def test_dual_mode_toggle_rate_can_change():
@@ -83,7 +83,7 @@ def test_dual_mode_toggle_rate_can_change():
     sm.set_dm_toggle_rate(2)
     sm.advance_dm_counter()
     sm.advance_dm_counter()
-    assert sm.get_dm_mode_bool() is False
+    assert sm.dm_on is False
 
 
 @pytest.mark.parametrize('high', [False, True])

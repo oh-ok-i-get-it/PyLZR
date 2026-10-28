@@ -60,7 +60,7 @@ def test_sound_mode_button_emits_and_syncs(panel):
 def test_gear_button_emits(panel):
     emitted = []
     panel.settings_toggled.connect(lambda: emitted.append(True))
-    panel._gear_btn.click()
+    panel.gear_button.click()
     assert emitted == [True]
 
 

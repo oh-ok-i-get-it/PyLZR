@@ -38,7 +38,7 @@ def test_windows_connects_when_loopmidi_appears_and_settings_opened(make_window)
     fake_rtmidi.reset('win')
     harness = make_window()
     fake_rtmidi.ports.append('PyLZR-MIDI 1')
-    harness.window.controls._gear_btn.click()
+    harness.window.controls.gear_button.click()
     assert harness.window.midi_out.port_label == 'PyLZR-MIDI 1'
     assert harness.window.settings_panel._midi_combo.currentText() == 'PyLZR-MIDI 1'
 
@@ -59,7 +59,7 @@ def test_choosing_another_midi_port(harness):
 def test_keyboard_notes_only_while_sound_mode_off(os_name, harness):   # os_name first: sets the OS before the window exists
     if os_name == 'win':
         fake_rtmidi.ports.append('PyLZR-MIDI 1')
-        harness.window.controls._gear_btn.click()     # reconnect to loopMIDI
+        harness.window.controls.gear_button.click()     # reconnect to loopMIDI
     harness.key(Qt.Key_Q)
     harness.key(Qt.Key_Shift)          # sound mode ON: keys ignored
     harness.key(Qt.Key_W)
@@ -88,7 +88,7 @@ def test_status_label_shows_last_key(harness):
 # ── Settings panel ───────────────────────────────────────────────────────────
 
 def expected_panel_pos(window):
-    gear = window.controls._gear_btn
+    gear = window.controls.gear_button
     br = gear.mapTo(window, QPoint(gear.width(), gear.height()))
     return QPoint(max(0, br.x() - window.settings_panel.width()), br.y())
 
@@ -97,16 +97,16 @@ def test_settings_panel_opens_under_gear_and_follows_resize(harness, qapp):
     w = harness.window
     w.show()
     qapp.processEvents()
-    w.controls._gear_btn.click()
-    assert w.settings_panel.isVisible() and w.controls._gear_btn.isChecked()
+    w.controls.gear_button.click()
+    assert w.settings_panel.isVisible() and w.controls.gear_button.isChecked()
     assert w.settings_panel.pos() == expected_panel_pos(w)
 
     w.resize(w.width() + 200, w.height())
     qapp.processEvents()
     assert w.settings_panel.pos() == expected_panel_pos(w)
 
-    w.controls._gear_btn.click()
-    assert not w.settings_panel.isVisible() and not w.controls._gear_btn.isChecked()
+    w.controls.gear_button.click()
+    assert not w.settings_panel.isVisible() and not w.controls.gear_button.isChecked()
 
 
 def test_audio_device_list_excludes_output_only_devices(harness):
@@ -136,6 +136,16 @@ def test_failed_audio_device_switch_keeps_old_device(harness):
     assert len(harness.frames) == 2
 
 
+def test_default_log_level_matches_settings(harness):
+    from pylzr.core.app_logger import logger
+    assert harness.window.settings_panel._log_combo.currentText() == 'Info'
+    before = log_text(harness)
+    logger.debug('hidden at the default level')
+    logger.info('shown at the default level')
+    added = log_text(harness)[len(before):]
+    assert 'hidden' not in added and 'shown' in added
+
+
 def test_log_level_filters_console(harness):
     w = harness.window
     w.settings_panel.log_level_changed.emit('quiet')
@@ -147,7 +157,7 @@ def test_log_level_filters_console(harness):
 def test_level_meter_tracks_input_when_settings_open(harness):
     w = harness.window
     w.show()                       # the meter only updates while the panel is visible
-    w.controls._gear_btn.click()
+    w.controls.gear_button.click()
     harness.feed(tone_chunks(1, (440, 16384)))
     assert 49 <= w.settings_panel._level_bar.value() <= 50
 

@@ -22,6 +22,7 @@ class FFTWorker(QObject):
         'hamming':   lambda n: np.hamming(n).astype(np.float32),
         'blackman':  lambda n: np.blackman(n).astype(np.float32),
     }
+    WINDOW_NAMES = tuple(_WINDOWS)   # valid set_window() names, rectangle first
 
     def __init__(self, sp_scale: float, lo_cut: int, med_cut: int,
                  hi_cut: int, chunk: int):
@@ -43,6 +44,6 @@ class FFTWorker(QObject):
         self.resultReady.emit(low, med, hi)
 
     def set_window(self, name: str):
-        """Switch windowing function. name: 'rectangle'|'hann'|'hamming'|'blackman'."""
+        """Switch windowing function (one of WINDOW_NAMES; unknown names fall back to rectangle)."""
         fn = self._WINDOWS.get(name, self._WINDOWS['rectangle'])
         self._window = fn(self._chunk)

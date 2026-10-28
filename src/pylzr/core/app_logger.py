@@ -18,7 +18,7 @@ class AppLogger(QObject):
 
     def __init__(self):
         super().__init__()
-        self._min_level = 0  # default: show everything (debug+)
+        self._min_level = _LEVEL_IDX['info']  # matches the Settings panel default
 
     def set_min_level(self, level: str):
         """'debug' | 'info' | 'warning' | 'error' | 'quiet'"""

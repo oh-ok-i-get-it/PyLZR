@@ -49,7 +49,8 @@ def test_keys_ignored_while_sound_mode_on():
     assert out.notes == []
 
 
-@pytest.mark.parametrize('key', [Qt.Key_F1, Qt.Key_Escape, Qt.Key_Backspace, Qt.Key_Control])
+@pytest.mark.parametrize('key', [Qt.Key_F1, Qt.Key_Escape, Qt.Key_Backspace, Qt.Key_Control,
+                                 Qt.Key_Shift])   # Shift toggles sound mode in the main window
 def test_unmapped_keys_ignored(key):
     mapper, out = make_mapper()
     mapper.handle_key(int(key))

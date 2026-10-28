@@ -47,7 +47,7 @@ def _fresh_state():
     fake_pyaudio.reset()
     yield
     from pylzr.core.app_logger import logger
-    logger.set_min_level('debug')
+    logger.set_min_level('info')    # the app's default
 
 
 @pytest.fixture(params=['win', 'mac'])
