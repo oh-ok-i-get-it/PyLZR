@@ -266,8 +266,10 @@ install_launchers_mac() {
     # Editing Info.plist breaks the app's signature; re-sign it (ad hoc)
     codesign --force --deep --sign - "$MAC_APP" >/dev/null 2>&1 || die "Couldn't re-sign $MAC_APP."
     say "  $MAC_APP"
-    ln -sfn "$MAC_APP" "$DESKTOP_LINK"
-    say "  $DESKTOP_LINK"
+    if [ -d "$(dirname "$DESKTOP_LINK")" ]; then
+        ln -sfn "$MAC_APP" "$DESKTOP_LINK"
+        say "  $DESKTOP_LINK"
+    fi
 }
 
 install_launchers_linux() {

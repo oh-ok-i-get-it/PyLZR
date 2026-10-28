@@ -230,6 +230,7 @@ function Install-Launchers([string]$Dir) {
     $pythonw = Join-Path $Dir '.venv\Scripts\pythonw.exe'
     $shell = New-Object -ComObject WScript.Shell
     foreach ($path in $Shortcuts) {
+        if (-not (Test-Path (Split-Path $path))) { continue }     # e.g. no Desktop folder
         $link = $shell.CreateShortcut($path)
         $link.TargetPath       = $pythonw              # pythonw: no console window
         $link.Arguments        = '-m pylzr'
