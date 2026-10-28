@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pyaudio as fake_pyaudio
+import pytest
 import rtmidi as fake_rtmidi
 from PyQt5.QtCore import QSettings, Qt
 
@@ -26,7 +27,8 @@ def test_round_trip_survives_a_new_instance():
         'analysis/count_rate': 35, 'analysis/fft_window': 'hann',
         'display/smoothing': 0.4, 'audio/gain': 2.5,
         'audio/device': 'Fake Line In', 'midi/port': 'IAC Driver Bus 1',
-        'app/log_level': 'debug',
+        'app/log_level': 'debug', 'app/control_mode': 'DMX',
+        'dmx/node_ip': '192.168.1.250', 'dmx/port_address': [1, 2, 3],
     }
     store = SettingsStore()
     for key, value in values.items():
@@ -43,6 +45,33 @@ def test_unreadable_values_fall_back_to_defaults():
     store = SettingsStore()
     assert store.get('analysis/count_rate') == DEFAULTS['analysis/count_rate']
     assert store.get('cutoffs/low') == DEFAULTS['cutoffs/low']
+
+
+@pytest.mark.parametrize('key, bad', [
+    ('app/control_mode', 'OSC'),                     # not a mode PyLZR has
+    ('app/control_mode', 'dmx'),                     # case matters
+    ('dmx/node_ip',      '10.201.6'),
+    ('dmx/node_ip',      'node.local'),
+    ('dmx/node_ip',      '::1'),                     # Art-Net is IPv4 only
+    ('dmx/port_address', ['128', '0', '0']),         # net is 0–127
+    ('dmx/port_address', ['0', '16', '0']),          # subnet is 0–15
+    ('dmx/port_address', ['0', '0', '16']),          # universe is 0–15
+    ('dmx/port_address', ['0', '0']),                # wrong length
+    ('dmx/port_address', 'zero'),
+])
+def test_unusable_dmx_values_fall_back_to_defaults(key, bad):
+    """e.g. a hand-edited PyLZR.ini"""
+    qs = QSettings(QSettings.IniFormat, QSettings.UserScope, 'PyLZR', 'PyLZR')
+    qs.setValue(key, bad)
+    qs.sync()
+    assert SettingsStore().get(key) == DEFAULTS[key]
+
+
+def test_dmx_defaults():
+    store = SettingsStore()
+    assert store.get('app/control_mode') == 'MIDI'
+    assert store.get('dmx/node_ip') == '10.201.6.100'
+    assert store.get('dmx/port_address') == [0, 0, 0]
 
 
 def test_each_change_is_written_to_disk_immediately():

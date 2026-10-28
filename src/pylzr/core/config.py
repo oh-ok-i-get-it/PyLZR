@@ -16,6 +16,12 @@ DEFAULT_HIGH_THRESHOLDS = (100, 300, 500)
 
 CUTOFF_SLIDER_MAX = 40_000
 
+CONTROL_MODES = ('MIDI', 'DMX')   # where cues go; the first is the default
+
+DMX_CHANNELS        = 512             # channels in one DMX universe
+DMX_REFRESH_HZ      = 40               # frames sent per second (a full DMX512 frame takes ~23 ms, so ≤ 44)
+DMX_DEFAULT_NODE_IP = '10.201.6.100'   # Pknight CR011R factory address
+
 WINDOW_W = 1200
 WINDOW_H = 800
 
@@ -26,5 +32,7 @@ __all__ = [
     'MIDI_SPACE_NOTE', 'MIDI_PORT_NAME',
     'DEFAULT_LOW_THRESHOLDS', 'DEFAULT_HIGH_THRESHOLDS',
     'CUTOFF_SLIDER_MAX',
+    'CONTROL_MODES',
+    'DMX_CHANNELS', 'DMX_REFRESH_HZ', 'DMX_DEFAULT_NODE_IP',
     'WINDOW_W', 'WINDOW_H',
 ]

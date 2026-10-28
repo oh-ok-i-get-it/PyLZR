@@ -8,6 +8,7 @@ import rtmidi as fake_rtmidi
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtTest import QTest
 
+from fakes import udp as fake_udp
 from pylzr.core import CHUNK, SAMPLE_RATE
 
 
@@ -30,6 +31,13 @@ def tone_chunks(n_chunks: int, *components: tuple[float, float]) -> np.ndarray:
     for freq, amp in components:
         x += amp * np.sin(2 * np.pi * freq * t)
     return np.clip(np.round(x), -32767, 32767).astype(np.int16).reshape(n_chunks, CHUNK)
+
+
+def dmx_packets() -> list[dict]:
+    """Every Art-Net packet sent through the fake network so far, decoded:
+    to (host, port), sequence, sub_uni, net, data (the channel values)."""
+    return [{'to': to, 'sequence': p[12], 'sub_uni': p[14], 'net': p[15], 'data': p[18:]}
+            for p, to in fake_udp.sent]
 
 
 def note_messages() -> list[list[int]]:

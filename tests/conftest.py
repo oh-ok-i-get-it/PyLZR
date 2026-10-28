@@ -32,6 +32,7 @@ fake_pyaudio = _install_fake('pyaudio')
 from PyQt5.QtCore import QCoreApplication, QEvent, QSettings  # noqa: E402
 from PyQt5.QtWidgets import QApplication            # noqa: E402
 
+from fakes import udp as fake_udp                  # noqa: E402
 from helpers import WindowHarness                  # noqa: E402
 
 
@@ -47,7 +48,20 @@ def _fresh_state(tmp_path):
     real user config)."""
     fake_rtmidi.reset('mac')
     fake_pyaudio.reset()
+    fake_udp.reset()
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / 'config'))
+
+
+@pytest.fixture(autouse=True)
+def _no_real_network(monkeypatch):
+    """Windows send DMX through fake sockets, so no test ever puts Art-Net
+    packets on the real network (tests of pylzr.dmx pass FakeSocket or a
+    loopback address themselves)."""
+    from functools import partial
+
+    import pylzr.gui.main_window as main_window
+    from pylzr.dmx import DMXOutput
+    monkeypatch.setattr(main_window, 'DMXOutput', partial(DMXOutput, socket_factory=fake_udp.FakeSocket))
 
 
 @pytest.fixture(params=['win', 'mac'])
