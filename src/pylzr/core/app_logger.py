@@ -78,10 +78,14 @@ class _SafeStreamHandler(logging.StreamHandler):
         return text
 
 
-def configure_console_logging(stream=None) -> logging.Handler:
+def configure_console_logging(stream=None) -> logging.Handler | None:
     """Show every app log line (debug and up) in the terminal. Colours are
-    used only when the stream is a terminal."""
+    used only when the stream is a terminal. Without a console (e.g. started
+    windowed with pythonw, where sys.stdout is None) nothing is added and
+    None is returned."""
     stream = stream or sys.stdout
+    if stream is None:
+        return None
     handler = _SafeStreamHandler(stream)
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(ConsoleFormatter(color=getattr(stream, 'isatty', lambda: False)()))

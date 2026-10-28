@@ -111,3 +111,116 @@ jobs:
       - name: Run tests (pip)
         if: matrix.deps == 'latest'
         run: pytest -v
+
+  # Runs install.ps1 / install.sh for real: once from this checkout (with the
+  # Start Menu/app/Desktop launchers and the `pylzr` command), once the way the
+  # web one-liner runs it (downloads main into the per-user folder), checking
+  # each result and that --uninstall removes everything. The app itself isn't
+  # started: runners have no audio device.
+  installer:
+    name: installer / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Prerequisites a user may already have; the scripts install the rest
+      # themselves (PortAudio via Homebrew/apt on macOS/Linux)
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Python 3.12 (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ── Windows ─────────────────────────────────────────────────────────
+      - name: Install from this checkout (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Yes -Source .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Check the install (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'PyLZR.lnk'
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          if (-not (Test-Path $target)) { throw "Start Menu shortcut points at a missing $target" }
+          $bin = "$env:LOCALAPPDATA\PyLZR\bin"
+          if (-not (Test-Path "$bin\pylzr.cmd")) { throw 'pylzr.cmd missing' }
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (($userPath -split ';') -notcontains $bin) { throw "$bin not on the user PATH" }
+          & .\.venv\Scripts\python.exe -c "import pylzr, pyaudio, rtmidi, PyQt5; print('pylzr', pylzr.__version__)"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Uninstall, then install the web way, then uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Assert-Clean {
+              $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'PyLZR.lnk'
+              if (Test-Path $lnk) { throw 'Start Menu shortcut left behind' }
+              if (Test-Path "$env:LOCALAPPDATA\PyLZR") { throw 'app folder left behind' }
+              $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+              if (($userPath -split ';') -contains "$env:LOCALAPPDATA\PyLZR\bin") { throw 'PATH entry left behind' }
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Assert-Clean
+          # As `irm .../install.ps1 | iex` runs it: no script folder, so it downloads main
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw .\install.ps1 | Invoke-Expression"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$env:LOCALAPPDATA\PyLZR\app\.venv\Scripts\python.exe" -c "import pylzr; print('downloaded copy:', pylzr.__version__)"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Assert-Clean
+
+      # ── macOS / Linux ───────────────────────────────────────────────────
+      - name: Install from this checkout (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: bash install.sh --yes --source .
+
+      - name: Check the install (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          set -eux
+          test -L ~/.local/bin/pylzr
+          test -x "$(readlink ~/.local/bin/pylzr)"
+          if [ "$RUNNER_OS" = macOS ]; then
+              app=~/Applications/PyLZR.app
+              test -d "$app"
+              plutil -extract NSMicrophoneUsageDescription raw "$app/Contents/Info.plist"
+              codesign --verify --deep --strict "$app"
+          else
+              grep -q "^Exec=\"$PWD/.venv/bin/pylzr\"$" ~/.local/share/applications/pylzr.desktop
+          fi
+          .venv/bin/python -c "import pylzr, pyaudio, rtmidi, PyQt5; print('pylzr', pylzr.__version__)"
+
+      - name: Uninstall, then install the web way, then uninstall (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          set -eux
+          assert_clean() {
+              test ! -e ~/.local/bin/pylzr
+              test ! -e ~/Applications/PyLZR.app
+              test ! -e ~/.local/share/applications/pylzr.desktop
+              test ! -e ~/.local/share/pylzr
+              test ! -e ~/"Library/Application Support/PyLZR"
+          }
+          bash install.sh --uninstall
+          assert_clean
+          # As `curl .../install.sh | bash` runs it: no script folder, so it downloads main
+          bash -s -- --yes < install.sh
+          if [ "$RUNNER_OS" = macOS ]; then app_dir=~/"Library/Application Support/PyLZR/app"; else app_dir=~/.local/share/pylzr/app; fi
+          "$app_dir/.venv/bin/python" -c "import pylzr; print('downloaded copy:', pylzr.__version__)"
+          test "$(readlink ~/.local/bin/pylzr)" = "$app_dir/.venv/bin/pylzr"
+          bash install.sh --uninstall
+          assert_clean

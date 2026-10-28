@@ -58,6 +58,20 @@ def test_terminal_survives_characters_its_encoding_lacks():
     assert raw.getvalue().decode('cp1252').rstrip().endswith('Key: q ? MIDI 73')
 
 
+def test_no_console_means_no_console_handler(monkeypatch):
+    """Windowed launch (pythonw): sys.stdout is None, so nothing is added and
+    logging still works without errors."""
+    monkeypatch.setattr('sys.stdout', None)
+    app_logger = logging.getLogger('pylzr')
+    before = list(app_logger.handlers)
+    errors = []
+    monkeypatch.setattr(logging.Handler, 'handleError', lambda self, record: errors.append(record))
+    assert configure_console_logging() is None
+    assert app_logger.handlers == before
+    log.info('started windowed')
+    assert errors == []
+
+
 @pytest.mark.parametrize('level, tone, color', [
     (logging.INFO,    Tone.ON,  txt.GREEN),
     (logging.INFO,    Tone.OFF, txt.RED),
