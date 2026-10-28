@@ -63,7 +63,7 @@ class WindowHarness:
     the tests that use it should not need to change.
 
     Recorded output:
-      frames   — (low.sum, med.sum, high.sum) of every raw FFT frame
+      frames   — (low.sum, med.sum, high.sum) of every raw FFT frame's bands
       averages — (low_avg, high_avg) for every completed averaging window
     MIDI output is recorded by the fake rtmidi module (fake_rtmidi.sent).
     """
@@ -75,20 +75,20 @@ class WindowHarness:
         self.averages: list[tuple[float, float]] = []
 
         engine = window.engine
-        engine.stop()     # tests feed audio explicitly instead of in real time
-        engine.spectrum_ready.connect(
-            lambda low, med, high: self.frames.append((float(low.sum()), float(med.sum()), float(high.sum()))))
+        def record_frame(spectrum):
+            low, med, high, _ = engine.bands.split(spectrum)
+            self.frames.append((float(low.sum()), float(med.sum()), float(high.sum())))
+        engine.spectrum_ready.connect(record_frame)
         engine.averages_ready.connect(
             lambda low_avg, high_avg: self.averages.append((float(low_avg), float(high_avg))))
 
     def feed(self, chunks):
-        """Run each int16 chunk through the pipeline and wait for its FFT frame."""
-        engine = self.window.engine
-        engine.stop()
+        """Deliver each int16 chunk as captured audio (as PortAudio's callback
+        would) and wait for its FFT frame."""
         target = len(self.frames) + len(chunks)
         for chunk in chunks:
-            fake_pyaudio.queue.append(np.asarray(chunk, dtype=np.int16).tobytes())
-            engine.tick()
+            fake_pyaudio.deliver(np.asarray(chunk, dtype=np.int16).tobytes(),
+                                 stream=self.window.engine.audio._stream)
         wait_until(lambda: len(self.frames) >= target)
 
     def key(self, qt_key):

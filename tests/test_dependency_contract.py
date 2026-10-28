@@ -22,7 +22,7 @@ CONTRACTS = {
                      'open_virtual_port', 'close_port', 'send_message']),
     ),
     'pyaudio': (
-        ['paInt16', 'PyAudio'],
+        ['paInt16', 'paContinue', 'paInputOverflow', 'PyAudio'],
         ('PyAudio', ['get_default_input_device_info', 'get_device_info_by_index',
                      'get_device_count', 'open', 'terminate']),
     ),

@@ -6,7 +6,9 @@ import logging
 
 import pyaudio as fake_pyaudio
 import rtmidi as fake_rtmidi
-from PyQt5.QtCore import QPoint, Qt
+from PyQt5.QtCore import QEvent, QPoint, Qt
+from PyQt5.QtGui import QKeyEvent
+from PyQt5.QtWidgets import QApplication
 
 from helpers import note_messages, tone_chunks, wait_for_note_offs, wait_until
 
@@ -68,6 +70,28 @@ def test_keyboard_notes_only_while_sound_mode_off(os_name, harness):   # os_name
     harness.key(Qt.Key_E)
     wait_for_note_offs()
     assert [m[1] for m in note_messages() if m[0] == 0x90] == [73, 75]
+
+
+def press(widget, key, text='', auto_repeat=False):
+    QApplication.sendEvent(widget, QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, text, auto_repeat))
+
+
+def test_held_keys_act_once(harness):
+    """Holding a key sends its note once; auto-repeat presses are ignored."""
+    w = harness.window
+    press(w, Qt.Key_Q, 'q')
+    for _ in range(5):
+        press(w, Qt.Key_Q, 'q', auto_repeat=True)
+    wait_for_note_offs()
+    assert [m[1] for m in note_messages() if m[0] == 0x90] == [73]
+
+
+def test_held_shift_toggles_sound_mode_once(harness):
+    w = harness.window
+    press(w, Qt.Key_Shift)
+    for _ in range(5):
+        press(w, Qt.Key_Shift, auto_repeat=True)
+    assert w.engine.sound_mode.enabled
 
 
 def test_sound_mode_buttons_stay_in_sync(harness):
@@ -172,3 +196,21 @@ def test_close_releases_audio_midi_and_fft_thread(harness):
     assert fake_pyaudio.streams[-1].closed
     assert not w.midi_out.connected and fake_rtmidi.live_virtual == []
     wait_until(lambda: w.engine.fft_thread.isFinished())
+
+
+def test_rescan_button_lists_new_devices(harness):
+    w = harness.window
+    fake_pyaudio.devices.append({'index': 3, 'name': 'USB Interface', 'maxInputChannels': 2})
+    w.settings_panel._rescan_btn.click()
+    combo = w.settings_panel._device_combo
+    assert 'USB Interface' in [combo.itemText(i) for i in range(combo.count())]
+    assert combo.currentText() == 'Fake Mic'
+    harness.feed(tone_chunks(1, (440, 1000)))        # audio still flows after the restart
+    assert len(harness.frames) == 1
+
+
+def test_failed_rescan_shows_status(harness):
+    fake_pyaudio.fail_open.add(0)
+    harness.window.settings_panel._rescan_btn.click()
+    assert harness.window.settings_panel._audio_val.text() == 'Rescan failed'
+    assert 'Audio device rescan failed' in log_text(harness)

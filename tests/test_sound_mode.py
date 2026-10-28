@@ -98,3 +98,13 @@ def test_set_cutoff_moves_threshold_for_one_band(band):
     changed, untouched = (sm.high_mode, sm.low_mode) if band == 'high' else (sm.low_mode, sm.high_mode)
     assert changed == 2
     assert untouched == 1
+
+
+def test_reset_makes_next_check_send_even_if_unchanged():
+    out = RecordingOutput()
+    sm = make_sound_mode(out)
+    sm.check_mode(50, 50)
+    sm.check_mode(50, 50)
+    sm.reset()
+    sm.check_mode(50, 50)
+    assert out.notes == [106, 106]

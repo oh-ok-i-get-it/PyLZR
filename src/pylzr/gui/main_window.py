@@ -12,6 +12,7 @@ from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
 from .settings_panel  import SettingsPanel
 from .log_panel       import LogPanel, AvgPanel
+from .settings_store  import DEFAULTS, SettingsStore
 
 log = get_logger('app')
 
@@ -21,7 +22,8 @@ class MainWindow(QWidget):
     AudioEngine (audio → analysis → sound mode) and the MIDI output.
 
     This class only connects things — the pipeline lives in engine.py and
-    the audio/, analysis/ and midi/ packages.
+    the audio/, analysis/ and midi/ packages. User settings are restored from
+    the SettingsStore at startup and saved whenever they change.
     """
 
     def __init__(self):
@@ -33,9 +35,13 @@ class MainWindow(QWidget):
         self.log_panel = LogPanel()
         logging.getLogger(LOGGER_NAME).addHandler(self.log_panel.log_handler)
 
-        # Subsystems
+        self.store = SettingsStore()
+
+        # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
-        self.engine   = AudioEngine(self.midi_out, parent=self)
+        self._open_saved_midi_port()
+        self.engine   = AudioEngine(self.midi_out, parent=self,
+                                    device_name=self.store.get('audio/device') or None)
         self.key_map  = KeyboardMapper(self.midi_out, is_blocked=lambda: self.engine.sound_mode.enabled)
 
         # GUI panels
@@ -58,11 +64,9 @@ class MainWindow(QWidget):
         self.settings_panel.hide()
 
         # Populate settings panel with live subsystem data
-        audio = self.engine.audio
-        self.settings_panel.set_audio_status(True, audio.device_name)
+        self._show_audio_device(ok=True)
         self._refresh_midi_ports()
         self.settings_panel.set_dmx_status()
-        self.settings_panel.set_audio_devices(audio.get_input_devices(), audio.device_index)
 
         # Engine → displays
         engine = self.engine
@@ -88,8 +92,56 @@ class MainWindow(QWidget):
         self.settings_panel.log_level_changed.connect(self._on_log_level_changed)
         self.settings_panel.app_sm_toggled.connect(self._toggle_sound_mode)
         self.settings_panel.control_mode_changed.connect(self._on_control_mode_changed)
+        self.settings_panel.reset_requested.connect(self._reset_settings)
+        self.settings_panel.audio_devices_refresh_requested.connect(self._rescan_audio_devices)
+
+        # Restore saved settings through the panels (same path as user input),
+        # then save every later change
+        self._apply_settings(self.store.get)
+        self._save_changes()
 
         engine.start()
+
+    # ------------------------------------------------------------------
+    # Saved settings
+    # ------------------------------------------------------------------
+
+    def _open_saved_midi_port(self):
+        saved = self.store.get('midi/port')
+        if saved and saved in self.midi_out.list_ports():
+            self.midi_out.open(saved)
+
+    def _apply_settings(self, get):
+        """Set every saved control from get(key) (stored or default values)."""
+        self.controls.set_cutoffs('low',  get('cutoffs/low'))
+        self.controls.set_cutoffs('high', get('cutoffs/high'))
+        self.controls.set_count_rate(get('analysis/count_rate'))
+        panel = self.settings_panel
+        panel.set_gain(get('audio/gain'))
+        panel.set_fft_window(get('analysis/fft_window'))
+        panel.set_smoothing(get('display/smoothing'))
+        panel.set_log_level(get('app/log_level'))
+
+    def _save_changes(self):
+        store, controls, panel = self.store, self.controls, self.settings_panel
+        controls.cutoff_changed.connect(lambda band, _mode, _val: store.set(f'cutoffs/{band}', controls.cutoffs(band)))
+        controls.count_rate_changed.connect(lambda v: store.set('analysis/count_rate', v))
+        panel.audio_gain_changed.connect(lambda v: store.set('audio/gain', v))
+        panel.fft_window_changed.connect(lambda v: store.set('analysis/fft_window', v))
+        panel.smoothing_changed.connect(lambda v: store.set('display/smoothing', v))
+        panel.log_level_changed.connect(lambda v: store.set('app/log_level', v))
+        # Devices are saved in their handlers, once the switch has succeeded
+
+    def _reset_settings(self):
+        self._apply_settings(lambda key: DEFAULTS[key])
+        if self.engine.switch_device(None):
+            self._show_audio_device(ok=True)
+        default_port = self.midi_out.default_port()
+        if self.midi_out.port_label != default_port:
+            self.midi_out.open(default_port)
+        self._refresh_midi_ports()
+        self.store.clear()
+        log.info('Settings reset to defaults', extra={'tone': Tone.MUTED})
 
     # ------------------------------------------------------------------
     # Engine → display handlers
@@ -134,9 +186,21 @@ class MainWindow(QWidget):
 
     def _on_audio_device_changed(self, device_index: int):
         if self.engine.switch_device(device_index):
-            self.settings_panel.set_audio_status(True, self.engine.audio.device_name)
+            self._show_audio_device(ok=True)
+            self.store.set('audio/device', self.engine.audio.device_name)
         else:
             self.settings_panel.set_audio_status(False, 'Switch failed')
+
+    def _rescan_audio_devices(self):
+        if self.engine.refresh_devices():
+            self._show_audio_device(ok=True)
+        else:
+            self.settings_panel.set_audio_status(False, 'Rescan failed')
+
+    def _show_audio_device(self, ok: bool):
+        audio = self.engine.audio
+        self.settings_panel.set_audio_status(ok, audio.device_name)
+        self.settings_panel.set_audio_devices(audio.get_input_devices(), audio.device_index)
 
     def _refresh_midi_ports(self):
         # Retry the default port while disconnected, e.g. loopMIDI started after PyLZR
@@ -146,7 +210,8 @@ class MainWindow(QWidget):
         self.settings_panel.set_midi_status(self.midi_out.connected, self.midi_out.port_name)
 
     def _on_midi_port_changed(self, label: str):
-        self.midi_out.open(label)
+        if self.midi_out.open(label):
+            self.store.set('midi/port', label)
         self._refresh_midi_ports()
 
     def _on_log_level_changed(self, level: str):
@@ -167,6 +232,8 @@ class MainWindow(QWidget):
         super().resizeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent):
+        if event.isAutoRepeat():   # a held key acts once
+            return
         if event.key() == Qt.Key_Shift:  # either Shift key — toggle sound mode
             self._toggle_sound_mode()
         else:

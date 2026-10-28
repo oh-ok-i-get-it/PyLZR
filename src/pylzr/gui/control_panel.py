@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QLabel, QSlider, QPushButton,
@@ -57,13 +59,13 @@ class ControlPanel(QWidget):
         rate_layout.setSpacing(1)
         self._count_label = QLabel(str(AVG_COUNT_RATE_DEFAULT))
         self._count_label.setStyleSheet('font-weight: bold;')
-        count_slider = QSlider(Qt.Horizontal)
-        count_slider.setRange(AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX)
-        count_slider.setValue(AVG_COUNT_RATE_DEFAULT)
-        count_slider.setTickInterval(5)
-        count_slider.setTickPosition(QSlider.TicksBelow)
-        count_slider.valueChanged.connect(self._on_count_rate)
-        rate_layout.addWidget(count_slider)
+        self._count_slider = QSlider(Qt.Horizontal)
+        self._count_slider.setRange(AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX)
+        self._count_slider.setValue(AVG_COUNT_RATE_DEFAULT)
+        self._count_slider.setTickInterval(5)
+        self._count_slider.setTickPosition(QSlider.TicksBelow)
+        self._count_slider.valueChanged.connect(self._on_count_rate)
+        rate_layout.addWidget(self._count_slider)
         rate_layout.addWidget(self._count_label)
         rate_group.setLayout(rate_layout)
 
@@ -159,6 +161,23 @@ class ControlPanel(QWidget):
         lbl.setFixedSize(54, 52)
         lbl.setStyleSheet(_MODE_DISPLAY_STYLE.format(color=color))
         return lbl
+
+    def set_count_rate(self, frames: int):
+        """As if the user moved the slider (emits count_rate_changed if it changes)."""
+        self._count_slider.setValue(frames)
+
+    def cutoffs(self, band: str) -> list[int]:
+        return list(self._cutoffs[band])
+
+    def set_cutoffs(self, band: str, values: Sequence[int]):
+        """Set all three cutoffs of a band at once and emit cutoff_changed for
+        each. Values are put in order first, so they can't clamp each other."""
+        values = sorted(min(max(int(v), 0), CUTOFF_SLIDER_MAX) for v in values)
+        self._cutoffs[band] = values
+        for mode, val in enumerate(values):
+            with QSignalBlocker(self._cutoff_sliders[band][mode]):
+                self._cutoff_sliders[band][mode].setValue(val)
+            self._on_cutoff(band, mode, val)
 
     def sync_sound_mode(self, is_on: bool):
         self._sm_button.setChecked(is_on)

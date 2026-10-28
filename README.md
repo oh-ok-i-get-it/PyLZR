@@ -1,15 +1,15 @@
 
 # PyLZR
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 
-PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging PyQt5 for the GUI, NumPy and SciPy for FFT audio processing, and MIDI output via `python-rtmidi`. PyLZR reacts in real-time to audio input, converting sound frequencies into MIDI commands to control DMX-compatible laser systems.
+PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging PyQt5 for the GUI, NumPy for FFT audio processing, and MIDI output via `python-rtmidi`. PyLZR reacts in real-time to audio input, converting sound frequencies into MIDI commands to control DMX-compatible laser systems.
 
 **Runs on macOS, Linux and Windows** (Windows needs the free [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html) driver — see [MIDI Output](#midi-output)).
 
 ## Features
 
-- **Real-time audio input and FFT analysis** using PyAudio, NumPy, and SciPy.
+- **Real-time audio input and FFT analysis** using PyAudio and NumPy.
 - **Dynamic GUI** with waveform and spectrum visualization powered by PyQtGraph.
 - **Real-time MIDI output** to control DMX devices via virtual or hardware MIDI ports.
 - **Customizable spectral threshold sliders** to fine-tune audio responsiveness.
@@ -27,11 +27,12 @@ pylzr/
 ├── src/
 │   └── pylzr/
 │       ├── __main__.py      # Entry point for console
-│       ├── audio/           # PyAudio capture stream
-│       ├── analysis/        # FFT worker, windowed averages, sound modes
+│       ├── engine.py        # Audio → FFT → averages → sound mode pipeline (no GUI)
+│       ├── audio/           # PyAudio capture stream (callback mode)
+│       ├── analysis/        # Frequency bands, FFT worker, windowed averages, sound modes
 │       ├── midi/            # MIDI output port + keyboard mapping
-│       ├── gui/             # Main window, control/settings/log panels, plots
-│       └── core/            # Config constants, logger, terminal text styles
+│       ├── gui/             # Main window, panels, plots, saved settings
+│       └── core/            # Config constants, logging, shared interfaces
 └── README.md
 ```
 
@@ -120,7 +121,6 @@ PyLZR requires:
 - Python 3.11 or 3.12 (newer versions have no prebuilt `python-rtmidi` package and need a C++ compiler to install)
 - PortAudio (macOS/Linux only — see [Manual Setup](#manual-setup))
 - NumPy
-- SciPy
 - PyAudio
 - PyQt5
 - pyqtgraph
@@ -131,8 +131,12 @@ PyLZR requires:
 ## Usage Instructions
 
 - **GUI Sliders:** Adjust spectral frequency cutoff thresholds directly within the GUI.
-- **Sound Mode Toggle:** Activate or deactivate MIDI note triggering based on audio analysis via [LSHIFT].
-- **Keyboard Controls:** Interact using defined keyboard mappings for MIDI note outputs.
+- **Sound Mode Toggle:** Activate or deactivate MIDI note triggering based on audio analysis via [SHIFT]. Turning it on sends the cue for the current audio straight away. Sound Mode always starts off.
+- **Keyboard Controls:** Interact using defined keyboard mappings for MIDI note outputs. Holding a key sends its note once.
+- **Saved Settings:** Cutoffs, averaging rate, gain, input device, MIDI port, FFT window, smoothing and log level are remembered between launches. Use **Reset to defaults** in Settings (⚙) to start over. They're stored in `PyLZR/PyLZR.ini` in your user config folder (`%APPDATA%` on Windows, `~/.config` on macOS/Linux).
+- **New audio inputs:** Plugged in a microphone or interface after starting PyLZR? Click **↻** next to the input device in Settings to rescan. Audio pauses for a moment.
+- **Spectrum:** Plotted against true frequencies. Yellow = low band (0–172 Hz, drives LOW), blue = mid, magenta = high band (5.5–11 kHz, drives HIGH), grey = 11–22 kHz (shown only).
+- **Performance → Overflow:** Counts audio chunks lost because the computer couldn't keep up. It should stay at 0.
 
 ## Development and Contribution
 
