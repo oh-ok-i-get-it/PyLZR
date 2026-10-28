@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylzr"
-version = "0.3.0"
+version = "0.4.0"
 description = "Sound-reactive DMX laser controller"
 readme = "README.md"
 license = "MIT"
@@ -12,10 +12,13 @@ license-files = ["LICENSE"]
 authors = [
   { name="Hayden", email="hpeery17@gmail.com" }
 ]
-requires-python = ">=3.11"
+# Capped at what CI tests and what has prebuilt packages: python-rtmidi has
+# none for 3.13+, so installing there means a C++ build that usually fails.
+# Raise the cap once python-rtmidi publishes newer wheels.
+requires-python = ">=3.11,<3.13"
 
-# Runtime dependencies (minimum versions). requirements.txt pins the exact
-# versions that are tested in CI.
+# Runtime dependencies (minimum versions). uv.lock pins the exact versions
+# tested in CI; requirements.txt is exported from it for pip users.
 dependencies = [
   "numpy>=1.24",
   "python-rtmidi>=1.5",
@@ -29,6 +32,18 @@ dev = ["pytest", "ruff"]
 
 [project.scripts]
 pylzr = "pylzr.__main__:main"
+
+[tool.uv]
+# uv.lock is one lock for every OS. PyQt5-Qt5 only has a Windows package for
+# 5.15.2, and that version has none for Apple Silicon, so pick per OS.
+constraint-dependencies = [
+  "pyqt5-qt5==5.15.2; sys_platform == 'win32'",
+  "pyqt5-qt5>=5.15.11; sys_platform != 'win32'",
+]
+# PyAudio has no macOS/Linux packages and is compiled against PortAudio.
+# Homebrew's folders (/opt/homebrew on Apple Silicon, /usr/local on Intel)
+# aren't on the compiler's default search path; missing folders are ignored.
+extra-build-variables = { pyaudio = { CFLAGS = "-I/opt/homebrew/include -I/usr/local/include", LDFLAGS = "-L/opt/homebrew/lib -L/usr/local/lib" } }
 
 [tool.setuptools.packages.find]
 where = ["src"]

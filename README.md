@@ -20,9 +20,10 @@ PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging Py
 
 ```
 pylzr/
-├── pyproject.toml           # Build and project metadata, minimum dependency versions
-├── requirements.txt         # Exact dependency versions tested in CI
-├── run.sh                   # Automated setup and launch script
+├── pyproject.toml           # Project metadata, minimum dependency versions, uv settings
+├── uv.lock                  # Exact dependency versions tested in CI (all OSes)
+├── requirements.txt         # The same versions exported from uv.lock, for pip
+├── .python-version          # Python version uv uses (3.12)
 ├── docs/                    # Historical notes (original v0.3 README)
 ├── tests/                   # pytest suite (fake audio/MIDI/network, runs offscreen)
 ├── src/
@@ -38,70 +39,94 @@ pylzr/
 └── README.md
 ```
 
-## Installation and Usage
+## Installation
 
-### Automated Setup (Recommended)
+PyLZR is run with **[uv](https://docs.astral.sh/uv/)**, a tool that sets up the right Python version and all of PyLZR's packages in a private folder (`.venv`) and starts the app. The same command works on Windows, macOS and Linux. (Prefer plain `pip`? See [Without uv](#without-uv-pip).)
 
-A bash script simplifies setup and launch (on Windows, run it from Git Bash):
+### 1. Install the prerequisites
+
+- **Windows** (PowerShell or Command Prompt):
+  ```powershell
+  winget install --id=astral-sh.uv -e
+  py install 3.12
+  ```
+  Then open a **new** terminal so `uv` is found. No winget? Use `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` for uv, and the Python 3.12 installer from [python.org](https://www.python.org/downloads/windows/) for Python. Python 3.12 is installed up front because many PCs (Smart App Control, school or work policies) block the Python builds uv would otherwise download; uv then uses the python.org one instead. For MIDI mode you'll also want [loopMIDI](#midi-output).
+- **macOS** ([Homebrew](https://brew.sh) required):
+  ```bash
+  xcode-select --install          # C compiler, if not installed yet
+  brew install portaudio uv
+  ```
+- **Linux** (Debian/Ubuntu; use your distribution's equivalents elsewhere):
+  ```bash
+  sudo apt install portaudio19-dev build-essential
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+
+On macOS and Linux, PyAudio (audio input) is compiled on first install, which is why PortAudio and a C compiler are needed. On Windows it comes ready-made.
+
+### 2. Get PyLZR
 
 ```bash
-./run.sh
+git clone https://github.com/oh-ok-i-get-it/PyLZR.git
+cd PyLZR
 ```
 
-This script will:
-- Create and activate a virtual environment (`.venv`)
-- Upgrade `pip`, `setuptools`, and `wheel`
-- Install required dependencies
-- Install PyLZR in editable mode
-- Launch the application
+No Git? Use **Code → Download ZIP** on the GitHub page, unzip it, and open a terminal in that folder.
 
-### Manual Setup
+### 3. Run it
 
-1. **Clone Repository:**
-   ```bash
-   git clone https://github.com/oh-ok-i-get-it/PyLZR.git
-   cd PyLZR
-   ```
+```bash
+uv run pylzr
+```
 
-   **macOS only:** PyAudio is built from source on macOS and needs PortAudio first:
-   ```bash
-   brew install portaudio
-   ```
-   (On Linux, install your distribution's PortAudio development package, e.g. `sudo apt install portaudio19-dev`.)
+The first run takes a minute: uv picks Python 3.12 (see `.python-version`), creates `.venv`, and installs the exact package versions tested in CI (`uv.lock`). Later runs start straight away.
 
-2. **Set up Python Virtual Environment:**
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-   On Windows (PowerShell):
-   ```powershell
-   python -m venv .venv
-   .venv\Scripts\Activate.ps1
-   ```
+- **Updating:** `git pull`, then `uv run pylzr`. uv installs any changed packages automatically.
+- **Starting fresh:** delete the `.venv` folder and run `uv run pylzr` again.
 
-3. **Install Dependencies:**
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+### First launch
 
-4. **Install PyLZR:**
-   ```bash
-   pip install -e .
-   ```
+- **macOS** asks whether your terminal may use the microphone. Allow it (or later: System Settings → Privacy & Security → Microphone).
+- **Windows:** if the level meter in Settings (⚙) stays empty, turn on Settings → Privacy & security → Microphone → *Let desktop apps access your microphone*.
+- Pick your input in Settings (⚙) → **Device**. PyLZR remembers it.
 
-### Launch PyLZR
+### Without uv (pip)
 
-- **Via Module:**
-  ```bash
-  python -m pylzr
-  ```
+<details>
+<summary>Install with Python's own <code>venv</code> and <code>pip</code> instead</summary>
 
-- **Via Console Command:**
-  ```bash
-  pylzr
-  ```
+You need **Python 3.11 or 3.12** (3.13 and newer can't install PyLZR's MIDI library). Install the prerequisites from step 1 except uv. On Debian/Ubuntu also install `python3.12-venv`. These commands use the environment's Python directly, so there's nothing to activate.
+
+**Windows** (PowerShell or Command Prompt):
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt -e .
+.venv\Scripts\python -m pylzr
+```
+
+**macOS / Linux:**
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt -e .
+.venv/bin/python -m pylzr
+```
+On Apple Silicon Macs, if the install fails with `portaudio.h` not found, point the build at Homebrew and run the install line again:
+```bash
+CFLAGS="-I$(brew --prefix)/include" LDFLAGS="-L$(brew --prefix)/lib" .venv/bin/python -m pip install -r requirements.txt -e .
+```
+
+`requirements.txt` holds the same tested versions as `uv.lock`. To update later: `git pull`, then rerun the install line.
+</details>
+
+### Troubleshooting installation
+
+| Message | Fix |
+|---|---|
+| `requires a different Python: 3.13…` (or newer) | PyLZR needs Python 3.11 or 3.12. With uv this is automatic; with pip, create `.venv` with 3.12 as shown above. |
+| `An Application Control policy has blocked this file` (Windows) | Your PC blocks uv's downloaded Python. Install Python 3.12 from python.org (or `py install 3.12`), run `uv python uninstall 3.12`, then `uv run pylzr` again. |
+| `invalid peer certificate: UnknownIssuer` | Your network (school/work) inspects HTTPS. Run `uv run --system-certs pylzr`, or set the environment variable `UV_SYSTEM_CERTS=1`. |
+| `portaudio.h` file not found | Install PortAudio and a C compiler (step 1), then run again. |
+| Linux: `Could not load the Qt platform plugin "xcb"` | `sudo apt install libxcb-xinerama0 libxkbcommon-x11-0` |
 
 ## MIDI Output
 
@@ -178,15 +203,15 @@ With Control Mode on DMX, **Channel tester…** opens a window with a slider (an
 ## Dependencies
 
 PyLZR requires:
-- Python 3.11 or 3.12 (newer versions have no prebuilt `python-rtmidi` package and need a C++ compiler to install)
-- PortAudio (macOS/Linux only - see [Manual Setup](#manual-setup))
+- Python 3.11 or 3.12 (`python-rtmidi` has no prebuilt packages for newer versions). uv uses 3.12 automatically.
+- PortAudio and a C compiler (macOS/Linux only; see [Installation](#1-install-the-prerequisites))
 - NumPy
 - PyAudio
 - PyQt5
 - pyqtgraph
 - python-rtmidi
 
-[`pyproject.toml`](pyproject.toml) lists the minimum versions; [`requirements.txt`](requirements.txt) pins the exact versions tested in CI.
+[`pyproject.toml`](pyproject.toml) lists the minimum versions; [`uv.lock`](uv.lock) pins the exact versions tested in CI, and [`requirements.txt`](requirements.txt) is exported from it for pip.
 
 ## Usage Instructions
 
@@ -211,13 +236,25 @@ Ensure adherence to the existing coding style and provide meaningful commit mess
 ### Running Tests
 
 ```bash
-pip install -e ".[dev]"
-pytest
+uv run --extra dev pytest
 ```
+
+(With pip: `.venv/bin/python -m pip install -e ".[dev]"` once, then `.venv/bin/python -m pytest`; on Windows use `.venv\Scripts\python`.) Lint with `uv run --extra dev ruff check .`.
 
 The tests replace audio, MIDI and the network with in-memory fakes and run Qt offscreen, so they need no microphone, MIDI port, Art-Net node or display, and they behave the same on every OS. (They never send Art-Net onto your network; the few real-socket tests use 127.0.0.1 only.) GitHub Actions runs them on Windows, macOS and Linux for every push.
 
-`tests/test_pipeline_golden.py` feeds fixed synthetic audio through the whole app and compares every FFT frame, average and MIDI note with `tests/golden/pipeline.json`. If a change is *meant* to alter that output, regenerate the file with `PYLZR_UPDATE_GOLDEN=1 pytest tests/test_pipeline_golden.py` and review its diff.
+`tests/test_pipeline_golden.py` feeds fixed synthetic audio through the whole app and compares every FFT frame, average and MIDI note with `tests/golden/pipeline.json`. If a change is *meant* to alter that output, regenerate the file with `PYLZR_UPDATE_GOLDEN=1 uv run --extra dev pytest tests/test_pipeline_golden.py` (PowerShell: `$env:PYLZR_UPDATE_GOLDEN=1; uv run --extra dev pytest tests/test_pipeline_golden.py`) and review its diff.
+
+### Changing Dependencies
+
+Edit the `dependencies` in [`pyproject.toml`](pyproject.toml), then update the lock and its pip export, and commit all three files:
+
+```bash
+uv lock
+uv export --frozen --no-hashes --no-emit-project -o requirements.txt
+```
+
+CI fails if `uv.lock` or `requirements.txt` are out of date. To move every package to its newest allowed version, use `uv lock --upgrade` instead of `uv lock`.
 
 ## Creator's Commentary
 
