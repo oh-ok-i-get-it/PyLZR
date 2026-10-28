@@ -1,6 +1,0 @@
-numpy
-scipy
-rtmidi
-PyQt5
-pyqtgraph
-PyAudio
