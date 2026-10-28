@@ -1,8 +1,9 @@
+# Exact versions tested in CI (pyproject.toml lists the minimum versions).
+# PyQt5-Qt5 / PyQt5_sip are left to PyQt5 to choose: their newer releases
+# have no Windows packages, so pinning them breaks installs on Windows.
 numpy==2.3.0
 PyAudio==0.2.14
 PyQt5==5.15.11
-PyQt5-Qt5==5.15.17
-PyQt5_sip==12.17.0
 pyqtgraph==0.13.7
 python-rtmidi==1.5.8
 scipy==1.15.3

@@ -1,9 +1,5 @@
-
 [build-system]
-requires = [
-  "setuptools>=61.0", 
-  "wheel"
-]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,33 +7,45 @@ name = "pylzr"
 version = "0.3.0"
 description = "Sound-reactive DMX laser controller"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name="Hayden", email="hpeery17@gmail.com" }
 ]
+requires-python = ">=3.11"
 
-# Runtime dependencies
+# Runtime dependencies (minimum versions). requirements.txt pins the exact
+# versions that are tested in CI.
 dependencies = [
-  "numpy",
-  "scipy",
-  "python-rtmidi",
-  "PyQt5",
-  "pyqtgraph",
-  "PyAudio",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "python-rtmidi>=1.5",
+  "PyQt5>=5.15",
+  "pyqtgraph>=0.13",
+  "PyAudio>=0.2.13",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+pylzr = "pylzr.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]     # run tests without installing the package
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
 
+[tool.ruff.lint]
+# pyflakes + pycodestyle errors, bugbear, pyupgrade. Whitespace/alignment
+# rules are left off: the code deliberately column-aligns assignments.
+select = ["E4", "E7", "E9", "F", "B", "UP"]
 
-[project.scripts]
-pylzr = "pylzr.__main__:main"
-
-
+[tool.ruff.lint.per-file-ignores]
+"src/pylzr/core/text_styles.py" = ["E741"]   # `I` = italic escape code

@@ -1,6 +1,5 @@
-import sys
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtCore import QTimer, Qt, QThread, QPoint, pyqtSignal, pyqtSlot
 
@@ -45,8 +44,8 @@ class PyLZR(QWidget):
         self.key_map   = KeyboardMapper(self.midi_out)
         self.analyzer  = AudioAnalyzer(AVG_COUNT_RATE_DEFAULT)
         self.soundmode = SoundMode(
-            *DEFAULT_LOW_THRESHOLDS,
-            *DEFAULT_HIGH_THRESHOLDS,
+            DEFAULT_LOW_THRESHOLDS,
+            DEFAULT_HIGH_THRESHOLDS,
             self.midi_out,
             dm_toggle_rate=int(DM_TIME_RATE / AVG_COUNT_RATE_DEFAULT),
         )
@@ -152,7 +151,7 @@ class PyLZR(QWidget):
             self.spectrum_widget.update_waveform(wf_display)
             self._processAudio.emit(chunk.copy())
 
-        except IOError as e:
+        except OSError as e:
             self._overflow_count += 1
             print(f'Audio I/O Error: {e}')
             logger.error(f'Audio I/O Error: {e}')
@@ -223,13 +222,16 @@ class PyLZR(QWidget):
         visible = not self.settings_panel.isVisible()
         if visible:
             self._refresh_midi_ports()
-            gear = self.controls._gear_btn
-            br = gear.mapTo(self, QPoint(gear.width(), gear.height()))
-            pw = self.settings_panel.width()
-            self.settings_panel.move(max(0, br.x() - pw), br.y())
+            self._position_settings_panel()
             self.settings_panel.raise_()
         self.settings_panel.setVisible(visible)
         self.controls.sync_gear(visible)
+
+    def _position_settings_panel(self):
+        """Right-align the floating settings panel under the gear button."""
+        gear = self.controls.gear_button
+        bottom_right = gear.mapTo(self, QPoint(gear.width(), gear.height()))
+        self.settings_panel.move(max(0, bottom_right.x() - self.settings_panel.width()), bottom_right.y())
 
     # ------------------------------------------------------------------
     # Settings panel handlers
@@ -287,14 +289,11 @@ class PyLZR(QWidget):
 
     def resizeEvent(self, event):
         if self.settings_panel.isVisible():
-            gear = self.controls._gear_btn
-            br = gear.mapTo(self, QPoint(gear.width(), gear.height()))
-            pw = self.settings_panel.width()
-            self.settings_panel.move(max(0, br.x() - pw), br.y())
+            self._position_settings_panel()
         super().resizeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == 16777248:  # Left Shift — toggle sound mode
+        if event.key() == Qt.Key_Shift:  # either Shift key — toggle sound mode
             self._toggle_sound_mode()
         else:
             self.key_map.handle_key(event.key())
@@ -309,10 +308,3 @@ class PyLZR(QWidget):
         self.fft_thread.quit()
         self.fft_thread.wait()
         super().closeEvent(event)
-
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = PyLZR()
-    window.show()
-    sys.exit(app.exec_())

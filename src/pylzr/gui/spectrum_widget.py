@@ -6,8 +6,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout
 class SpectrumWidget(QWidget):
     def __init__(self, audio_input):
         super().__init__()
-        self._audio  = audio_input
-        self._traces = {}
+        self._audio = audio_input
 
         pg.setConfigOptions(antialias=True)
         self._gfx = pg.GraphicsLayoutWidget()
@@ -23,7 +22,7 @@ class SpectrumWidget(QWidget):
         rate  = self._audio.rate
 
         wf_x = pg.AxisItem(orientation='bottom')
-        wf_x.setTicks([[(0, '0'), (1024, '1024'), (2048, '2048'), (3072, '3072'), (4096, '4096')]])
+        wf_x.setTicks([[(x, str(x)) for x in range(0, 2 * chunk + 1, chunk // 2)]])
         self.waveform = self._gfx.addPlot(title='WAVEFORM', row=1, col=1, axisItems={'bottom': wf_x})
         self.waveform.setYRange(0, 255, padding=0)
         self.waveform.setXRange(0, 2 * chunk, padding=0.005)
@@ -40,18 +39,13 @@ class SpectrumWidget(QWidget):
         for plot in (self.waveform, self.spectrum):
             plot.getViewBox().keyPressEvent = lambda ev: ev.ignore()
 
+        self._waveform_line = self.waveform.plot(pen='c')
+        self._spectrum_lines = [self.spectrum.plot(pen=pen) for pen in ('y', 'b', 'm')]  # low, med, high
+
     def update_waveform(self, data: np.ndarray):
-        if 'waveform' not in self._traces:
-            self._traces['waveform'] = self.waveform.plot(pen='c', width=3)
-        self._traces['waveform'].setData(self._audio.waveform_x, data)
+        self._waveform_line.setData(self._audio.waveform_x, data)
 
     def update_spectrum(self, low: np.ndarray, med: np.ndarray, high: np.ndarray):
-        for name, data, axis in (
-            ('spectrum_low',  low,  self._audio.f_low),
-            ('spectrum_med',  med,  self._audio.f_med),
-            ('spectrum_high', high, self._audio.f_high),
-        ):
-            if name not in self._traces:
-                pen = {'spectrum_low': 'y', 'spectrum_med': 'b', 'spectrum_high': 'm'}[name]
-                self._traces[name] = self.spectrum.plot(pen=pen, width=3)
-            self._traces[name].setData(axis, data)
+        axes = (self._audio.f_low, self._audio.f_med, self._audio.f_high)
+        for line, axis, data in zip(self._spectrum_lines, axes, (low, med, high), strict=True):
+            line.setData(axis, data)

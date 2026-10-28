@@ -1,4 +1,5 @@
 from bisect import bisect_right
+from collections.abc import Sequence
 from ..core import DM_SEMITONE_OFFSET, MIDI_SPACE_NOTE
 from ..core import text_styles as txt
 from ..core.app_logger import logger
@@ -20,39 +21,34 @@ class SoundMode:
     handlers each implementing on_mode_change(low_mode, high_mode, note).
     """
 
-    LOW_COLOR  = {0: txt.YELLOW, 1: txt.BLUE, 2: txt.CYAN, 3: txt.PURPLE}
-    HIGH_COLOR = {0: txt.YELLOW, 1: txt.BLUE, 2: txt.CYAN, 3: txt.PURPLE}
+    # Terminal color per mode index (same scheme for both bands)
+    MODE_COLOR = {0: txt.YELLOW, 1: txt.BLUE, 2: txt.CYAN, 3: txt.PURPLE}
 
+    # MODE_MAP[low_mode][high_mode] -> base MIDI note
     MODE_MAP = {
-        0: {0: 'SPACE', 1: 60, 2: 61, 3: 62},
-        1: {0: 63,      1: 64, 2: 65, 3: 66},
-        2: {0: 67,      1: 68, 2: 69, 3: 70},
-        3: {0: 71,      1: 72, 2: 73, 3: 74},
+        0: {0: MIDI_SPACE_NOTE, 1: 60, 2: 61, 3: 62},
+        1: {0: 63,              1: 64, 2: 65, 3: 66},
+        2: {0: 67,              1: 68, 2: 69, 3: 70},
+        3: {0: 71,              1: 72, 2: 73, 3: 74},
     }
 
     def __init__(
         self,
-        low_quiet_cutoff:  float,
-        low_mode1_cutoff:  float,
-        low_mode2_cutoff:  float,
-        high_quiet_cutoff: float,
-        high_mode1_cutoff: float,
-        high_mode2_cutoff: float,
-        output_handler,            # any object with press_note(note: int)
+        low_thresholds:  Sequence[float],   # (quiet, mode 1, mode 2) cutoffs
+        high_thresholds: Sequence[float],
+        output_handler,                      # any object with press_note(note: int)
         dm_toggle_rate: int = 120,
     ):
         self._output = output_handler
 
-        self.low_mode       = -1
-        self.high_mode      = -1
-        self.low_prev_mode  = 0
-        self.high_prev_mode = 0
+        self.low_mode  = -1
+        self.high_mode = -1
 
-        self.dm_on        = True
+        self.dm_on         = True
         self.dm_mode_label = 1
 
-        self._low_thresholds  = [low_quiet_cutoff,  low_mode1_cutoff,  low_mode2_cutoff]
-        self._high_thresholds = [high_quiet_cutoff, high_mode1_cutoff, high_mode2_cutoff]
+        self._low_thresholds  = list(low_thresholds)
+        self._high_thresholds = list(high_thresholds)
 
         self._dm_count       = 0
         self._dm_toggle_rate = dm_toggle_rate
@@ -64,11 +60,10 @@ class SoundMode:
     def update_mode(self):
         lm, hm = self.low_mode, self.high_mode
         text = (
-            f"{self.LOW_COLOR[lm]}{txt.I}"
+            f"{self.MODE_COLOR[lm]}{txt.I}"
             f"\n>>>> SM: {txt.B}LOW{txt.BOFF} {lm} SENT \t{txt.RESET}"
         )
-        offset    = self.MODE_MAP[lm].get(hm, 'SPACE')
-        midi_base = MIDI_SPACE_NOTE if offset == 'SPACE' else offset
+        midi_base = self.MODE_MAP[lm][hm]
 
         if (not self.dm_on) or (midi_base == MIDI_SPACE_NOTE):
             note       = midi_base
@@ -79,7 +74,7 @@ class SoundMode:
 
         self.dm_mode_label = mode_label
         self._output.press_note(note)
-        print(f"{text}\t{txt.B}{self.HIGH_COLOR[hm]}HIGH{txt.BOFF} {hm} SENT <<<<\n{txt.IOFF}")
+        print(f"{text}\t{txt.B}{self.MODE_COLOR[hm]}HIGH{txt.BOFF} {hm} SENT <<<<\n{txt.IOFF}")
         print(f"{txt.WHITE}\t|| DUAL MODE: {mode_label} ||\n\tMIDI NOTE: {note}")
         logger.info(f'SoundMode: LOW={lm} HIGH={hm} | DualMode={mode_label} | MIDI={note}', '#ffffff')
 
@@ -100,9 +95,6 @@ class SoundMode:
 
     def toggle_dm_mode(self):
         self.dm_on = not self.dm_on
-
-    def get_dm_mode_bool(self) -> bool:
-        return self.dm_on
 
     @property
     def dm_countdown(self) -> int:

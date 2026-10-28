@@ -1,5 +1,5 @@
-import threading
 import rtmidi as midi
+from PyQt5.QtCore import QTimer
 from ..core import MIDI_PORT_NAME
 from ..core import text_styles as txt
 from ..core.app_logger import logger
@@ -10,6 +10,8 @@ from ..core.app_logger import logger
 _VIRTUAL_APIS = {midi.API_MACOSX_CORE, midi.API_LINUX_ALSA, midi.API_UNIX_JACK}
 
 VIRTUAL_LABEL = f'{MIDI_PORT_NAME} (virtual)'
+
+_NOTE_LENGTH_MS = 50   # Note OFF follows Note ON after this delay
 
 
 class MIDIOutput:
@@ -23,7 +25,8 @@ class MIDIOutput:
     disconnected press_note() is a no-op. list_ports()/open() let the UI pick
     any other port.
 
-    press_note() sends a Note ON followed by a Note OFF after 50 ms.
+    press_note() sends a Note ON followed by a Note OFF after 50 ms (the OFF
+    is scheduled on the Qt event loop, so a QApplication must be running).
     toggle_sm() flips the sm_ON flag used by KeyboardMapper and SoundMode.
     """
 
@@ -104,9 +107,8 @@ class MIDIOutput:
             if self.midiout is out:
                 out.send_message([NOTE_OFF, note, 0])
 
-        t = threading.Timer(0.05, send_off)
-        t.daemon = True
-        t.start()
+        # Runs on this (GUI) thread's event loop, so every send happens on one thread
+        QTimer.singleShot(_NOTE_LENGTH_MS, send_off)
 
     def toggle_sm(self):
         if self.sm_ON:

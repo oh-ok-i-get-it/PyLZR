@@ -19,9 +19,11 @@ PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging Py
 
 ```
 pylzr/
-├── pyproject.toml           # Build and project metadata
-├── requirements.txt         # Project dependencies
+├── pyproject.toml           # Build and project metadata, minimum dependency versions
+├── requirements.txt         # Exact dependency versions tested in CI
 ├── run.sh                   # Automated setup and launch script
+├── docs/                    # Historical notes (original v0.3 README)
+├── tests/                   # pytest suite (fake audio/MIDI, runs offscreen)
 ├── src/
 │   └── pylzr/
 │       ├── __main__.py      # Entry point for console
@@ -54,9 +56,15 @@ This script will:
 
 1. **Clone Repository:**
    ```bash
-   git clone https://github.com/yourusername/pylzr.git
-   cd pylzr
+   git clone https://github.com/oh-ok-i-get-it/PyLZR.git
+   cd PyLZR
    ```
+
+   **macOS only:** PyAudio is built from source on macOS and needs PortAudio first:
+   ```bash
+   brew install portaudio
+   ```
+   (On Linux, install your distribution's PortAudio development package, e.g. `sudo apt install portaudio19-dev`.)
 
 2. **Set up Python Virtual Environment:**
    ```bash
@@ -71,7 +79,7 @@ This script will:
 
 3. **Install Dependencies:**
    ```bash
-   pip install --upgrade pip setuptools wheel
+   pip install --upgrade pip
    pip install -r requirements.txt
    ```
 
@@ -110,6 +118,7 @@ On any OS, the **MIDI Out** dropdown in Settings lets you send to a different po
 
 PyLZR requires:
 - Python 3.11 or 3.12 (newer versions have no prebuilt `python-rtmidi` package and need a C++ compiler to install)
+- PortAudio (macOS/Linux only — see [Manual Setup](#manual-setup))
 - NumPy
 - SciPy
 - PyAudio
@@ -117,7 +126,7 @@ PyLZR requires:
 - pyqtgraph
 - python-rtmidi
 
-Refer to [`requirements.txt`](requirements.txt) for exact versions.
+[`pyproject.toml`](pyproject.toml) lists the minimum versions; [`requirements.txt`](requirements.txt) pins the exact versions tested in CI.
 
 ## Usage Instructions
 

@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
     QLabel, QSlider, QPushButton,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSignalBlocker
+from . import theme
 from ..core import (
     CUTOFF_SLIDER_MAX,
     AVG_COUNT_RATE_DEFAULT, AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX,
@@ -82,8 +83,8 @@ class ControlPanel(QWidget):
         self._dm_count_display = self._make_small_display('CNT', '—', '#555')
 
         # Current sound mode index displays (LOW / HIGH)
-        self._low_mode_display  = self._make_mode_display('LOW',  '—', '#d4a017')
-        self._high_mode_display = self._make_mode_display('HIGH', '—', '#9b59b6')
+        self._low_mode_display  = self._make_mode_display('LOW',  '—', theme.LOW_BAND)
+        self._high_mode_display = self._make_mode_display('HIGH', '—', theme.HIGH_BAND)
 
         top_row.addWidget(rate_group)
         top_row.addWidget(self._sm_button)
@@ -94,20 +95,20 @@ class ControlPanel(QWidget):
         top_row.addStretch(1)
 
         # Gear / settings button — pinned to the far right of the top row
-        self._gear_btn = QPushButton('⚙')
-        self._gear_btn.setFixedSize(30, 30)
-        self._gear_btn.setCheckable(True)
-        self._gear_btn.setToolTip('Settings')
-        self._gear_btn.setStyleSheet(
+        self.gear_button = QPushButton('⚙')
+        self.gear_button.setFixedSize(30, 30)
+        self.gear_button.setCheckable(True)
+        self.gear_button.setToolTip('Settings')
+        self.gear_button.setStyleSheet(
             'QPushButton {'
             '  background: transparent; color: #555; font-size: 17px;'
             '  border: none; border-radius: 4px;'
             '}'
             'QPushButton:hover { color: #c9d1d9; background: #1e1e1e; }'
-            'QPushButton:checked { color: #58a6ff; background: #1a1a1a; }'
+            f'QPushButton:checked {{ color: {theme.ACCENT}; background: #1a1a1a; }}'
         )
-        self._gear_btn.clicked.connect(lambda: self.settings_toggled.emit())
-        top_row.addWidget(self._gear_btn)
+        self.gear_button.clicked.connect(lambda: self.settings_toggled.emit())
+        top_row.addWidget(self.gear_button)
 
         root.addLayout(top_row)
 
@@ -171,7 +172,7 @@ class ControlPanel(QWidget):
         self._sm_button.setText('Sound Mode: ON' if is_on else 'Sound Mode: OFF')
 
     def sync_gear(self, is_open: bool):
-        self._gear_btn.setChecked(is_open)
+        self.gear_button.setChecked(is_open)
 
     def update_sound_modes(self, low_mode: int, high_mode: int):
         self._low_mode_display.setText(f'LOW\n{"—" if low_mode < 0 else low_mode}')

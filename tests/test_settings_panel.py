@@ -71,6 +71,13 @@ def test_dropdown_values(panel, combo, signal, expected):
     assert received == expected[1:] + expected[:1]
 
 
+def test_window_dropdown_lists_every_fft_window(panel):
+    from pylzr.analysis import FFTWorker
+    combo = panel._window_combo
+    assert [combo.itemData(i) for i in range(combo.count())] == list(FFTWorker.WINDOW_NAMES)
+    assert combo.currentData() == 'rectangle'
+
+
 def test_sound_mode_button(panel):
     received = capture(panel.app_sm_toggled)
     panel._sm_btn.click()
