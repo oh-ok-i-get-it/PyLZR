@@ -1,6 +1,8 @@
 import pytest
 
-from pylzr.dmx import ARTNET_PORT, PortAddress, build_artdmx, next_sequence
+from helpers import artpollreply
+from pylzr.dmx import (ARTNET_PORT, PollReply, PortAddress, build_artdmx, build_artpoll, next_sequence,
+                       parse_artpollreply)
 
 
 def test_artdmx_bytes_match_the_spec():
@@ -72,3 +74,91 @@ def test_sequence_cycles_through_1_to_255_never_0():
 
 def test_art_net_port():
     assert ARTNET_PORT == 6454
+
+
+# ── ArtPoll / ArtPollReply ───────────────────────────────────────────────
+
+def test_artpoll_bytes_match_the_spec():
+    assert build_artpoll() == bytes([
+        *b'Art-Net', 0x00,     # ID
+        0x00, 0x20,            # OpCode 0x2000, low byte first
+        0x00, 14,              # ProtVerHi, ProtVerLo
+        0x00,                  # Flags: reply once, no diagnostics
+        0x00,                  # DiagPriority
+    ])
+
+
+def test_reply_fields():
+    reply = parse_artpollreply(artpollreply(), '10.201.6.100')
+    assert reply == PollReply(ip='10.201.6.100', short_name='CR011R', long_name='Art-Net node',
+                              report='#0001 [0001] Power On Tests successful', mac='00:1a:2b:3c:4d:5e',
+                              bind_index=1, outputs=(PortAddress(0, 0, 0),))
+
+
+def test_reply_outputs_combine_net_subnet_and_each_ports_universe():
+    """Ports 1 and 3 output DMX, port 2 only inputs it. Bits outside each
+    field (Net bit 7, high nibbles) are ignored."""
+    data = artpollreply(net=0x83, subnet=0xF2, port_types=(0x80, 0x40, 0xC0), sw_out=(0x01, 0x02, 0x1F))
+    assert parse_artpollreply(data, '10.201.6.100').outputs == (PortAddress(3, 2, 1), PortAddress(3, 2, 15))
+
+
+@pytest.mark.parametrize('num_ports, expected', [(0, 0), (2, 2), (4, 4), (9, 4)])
+def test_reply_reads_only_the_ports_it_reports(num_ports, expected):
+    """At most 4 ports per reply: the bytes after PortTypes (GoodInput, set
+    to look like output ports here) are never read as ports."""
+    data = bytearray(artpollreply(port_types=(0x80,) * 4, sw_out=(0, 1, 2, 3), num_ports=num_ports))
+    data[178:182] = b'\x80' * 4
+    outputs = parse_artpollreply(data, '10.201.6.100').outputs
+    assert outputs == tuple(PortAddress(0, 0, u) for u in range(expected))
+
+
+def test_node_that_only_inputs_dmx_has_no_outputs():
+    """E.g. a CR011R set to DMX → Art-Net."""
+    data = artpollreply(port_types=(0x40,))
+    assert parse_artpollreply(data, '10.201.6.100').outputs == ()
+
+
+def test_reply_without_its_own_ip_uses_the_sender():
+    reply = parse_artpollreply(artpollreply(ip='0.0.0.0'), '10.201.6.100')
+    assert reply.ip == '10.201.6.100'
+
+
+def test_reply_ip_wins_over_the_sender():
+    """The IP field is where the node takes DMX, even if the reply came from
+    another address."""
+    reply = parse_artpollreply(artpollreply(ip='10.201.6.100'), '10.201.6.7')
+    assert reply.ip == '10.201.6.100'
+
+
+@pytest.mark.parametrize('raw, shown', [
+    (b'CR011R\x00junk after the end', 'CR011R'),
+    (b'ABCDEFGHIJKLMNOPQR', 'ABCDEFGHIJKLMNOPQR'),       # all 18 bytes, no terminating NUL
+    (b' Caf\xe9\x07 node\n', 'Caf node'),                 # non-ASCII and control characters dropped
+    (b'', ''),
+])
+def test_names_are_cleaned_for_display(raw, shown):
+    assert parse_artpollreply(artpollreply(short_name=raw), '10.201.6.100').short_name == shown
+
+
+def test_missing_mac_is_none():
+    assert parse_artpollreply(artpollreply(mac=bytes(6)), '10.201.6.100').mac is None
+
+
+def test_shortest_valid_reply_reads_missing_fields_as_zero():
+    """207 bytes (up to the MAC) is the spec's minimum; BindIndex is past it."""
+    reply = parse_artpollreply(artpollreply(bind_index=5)[:207], '10.201.6.100')
+    assert reply.mac == '00:1a:2b:3c:4d:5e'
+    assert reply.bind_index == 0
+
+
+@pytest.mark.parametrize('data', [
+    artpollreply()[:206],                                 # too short
+    b'Art-Net\x00' + artpollreply()[8:].replace(b'\x00\x21', b'\x00\x20', 1),   # an ArtPoll's OpCode
+    b'Art-Nyt\x00' + artpollreply()[8:],                  # wrong ID
+    build_artpoll(),                                      # our own poll, heard back
+    build_artdmx(bytes(512), PortAddress()),              # DMX data: long enough, wrong OpCode
+    b'',
+    bytes(range(256)),
+], ids=['short', 'opcode', 'id', 'artpoll', 'artdmx', 'empty', 'garbage'])
+def test_anything_else_is_not_a_reply(data):
+    assert parse_artpollreply(data, '10.201.6.100') is None
