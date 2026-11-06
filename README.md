@@ -1,7 +1,7 @@
 
 # PyLZR
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 
 PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging PyQt5 for the GUI, NumPy for FFT audio processing, MIDI output via `python-rtmidi`, and direct DMX output over Art-Net. In addition to manual control, PyLZR reacts in real-time to audio input, converting sound frequencies into commands that control DMX-compatible laser systems through third party lighting software over MIDI or straight to an Art-Net node.
 
@@ -12,7 +12,7 @@ PyLZR is a Python-based sound-reactive DMX laser light controller, leveraging Py
 - **Real-time audio input and FFT analysis** using PyAudio and NumPy.
 - **Dynamic GUI** with waveform and spectrum visualization powered by PyQtGraph.
 - **Real-time MIDI output** to control DMX devices via virtual or hardware MIDI ports.
-- **Direct DMX output over Art-Net** to a network DMX node (e.g. Pknight CR011R), with a channel tester for exploring a fixture's channels.
+- **Direct DMX output over Art-Net** to a network DMX node (e.g. Pknight CR011R), with a channel tester for exploring a fixture's channels. PyLZR finds the nodes on your network and shows whether yours is answering.
 - **Customizable spectral threshold sliders** to fine-tune audio responsiveness.
 - **Dual-mode functionality** for varied DMX outputs.
 
@@ -35,7 +35,7 @@ pylzr/
 │       ├── audio/           # PyAudio capture stream (callback mode)
 │       ├── analysis/        # Frequency bands, FFT worker, windowed averages, sound modes
 │       ├── midi/            # MIDI output port + keyboard mapping
-│       ├── dmx/             # Art-Net packets, DMX universe, UDP sending, DMX output
+│       ├── dmx/             # Art-Net packets, DMX universe, UDP sockets, node discovery, DMX output
 │       ├── gui/             # Main window, panels, plots, channel tester, saved settings
 │       └── core/            # Config constants, logging, shared interfaces, output switch
 └── README.md
@@ -215,18 +215,23 @@ Wi-Fi stays connected for internet; only the Ethernet port changes. (Undo it lat
 
 ### 3. Point PyLZR at the node
 
-In Settings (⚙) → **DMX (ART-NET)**: enter the node's **Node IP** and its **Net / Sub / Uni**, then set **Control Mode** to **DMX (Art-Net)**. These are saved with your other settings.
+In Settings (⚙) → **DMX (ART-NET)**, click **Find**. After 2 seconds a list drops down with every Art-Net node that answered, as *name · IP · Net:Sub:Uni* (e.g. `CR011R · 10.201.6.100 · 0:0:0`). Pick yours and **Node IP** and **Net / Sub / Uni** are filled in. You can also type them yourself, e.g. for a node that doesn't answer (some don't). Then set **Control Mode** to **DMX (Art-Net)**. These are saved with your other settings.
 
-The **DMX** indicator at the top of Settings shows what's happening:
+- The first time, your computer's firewall may ask whether to let Python receive network traffic. On Windows, allow **Private and Public** networks. See [Firewall](#firewall).
+- A node listed greyed out with *no DMX outputs* answered, but is set to the other direction: set its transmit mode to Art-Net → DMX (step 1).
+- *No Art-Net nodes answered*: see [Troubleshooting](#troubleshooting).
+
+The **DMX** indicator at the top of Settings shows what's happening. While DMX is on, PyLZR asks the node "are you there?" (an Art-Net *ArtPoll*) every 3 seconds:
 
 | Indicator | Meaning |
 |---|---|
 | ⚫ grey — `Off` | Not sending (Control Mode is MIDI). |
-| 🟢 green — `via 10.201.6.50` | Sending. Packets leave from the computer address shown, on the node's network. |
+| 🟢 green — `CR011R answered · via 10.201.6.50` | Sending, and the node answered within the last 10 seconds, so it's there and reachable. |
+| 🔵 blue — `via 10.201.6.50` | Sending from the computer address shown, on the node's network, but no answer. Normal for nodes that never answer; DMX still goes out. Otherwise check the firewall and the Node IP. If it was green before, the log says the node stopped answering: check it's on and cabled. |
 | 🟡 amber — `via 192.168.… — check cable / IP` | Packets are leaving from a *different* network (usually Wi-Fi), so they're going to your router, not the node. Check the Ethernet cable is plugged in and step 2 is done. Rechecked every second. |
 | 🔴 red — e.g. `network unreachable` | The computer couldn't send at all — no network route to that address. |
 
-Art-Net has no delivery receipt, so green means *sent towards the node*, not *received by it*. If green but nothing happens, check the node's data light/screen, its Net/SubNet/Universe and transmit mode, and the DMX cable to the fixture.
+Green means the node itself is answering; it doesn't check the cable from the node to the fixture. If green but nothing happens, check that the node's Net/SubNet/Universe match PyLZR's, its data light/screen, and the DMX cable to the fixture.
 
 ### Channel tester
 
@@ -240,8 +245,26 @@ With Control Mode on DMX, **Channel tester…** opens a window with a slider (an
 ### Troubleshooting
 
 - **Amber indicator:** see the table above; almost always the cable or the computer's IP address.
-- **See the packets:** [Wireshark](https://www.wireshark.org/) with the display filter `udp.port == 6454` shows every Art-Net packet PyLZR sends (about 40 per second, "ArtDmx").
-- **Firewall:** PyLZR only *sends* Art-Net, which firewalls don't block by default.
+- **Find lists nothing, or the indicator stays blue:** in order of likelihood:
+  1. The firewall blocks the answers (see [Firewall](#firewall)).
+  2. The cable isn't plugged in, or the computer's IP address isn't set (step 2).
+  3. The node doesn't answer ArtPoll at all: type its IP address in yourself; DMX output works the same.
+- **Another Art-Net program** (e.g. QLC+, Resolume) can run at the same time: PyLZR shares the Art-Net port (6454) with it. If it can't, the log says so and some nodes may not be found; close the other program and click Find again.
+- **See the packets:** [Wireshark](https://www.wireshark.org/) with the display filter `artnet` shows every Art-Net packet:
+  - PyLZR's DMX data (*ArtDmx*, about 40 per second)
+  - its "are you there?" (*ArtPoll*: every 3 seconds while DMX is on, and when you click Find)
+  - the node's answer (*ArtPollReply*)
+
+### Firewall
+
+Sending DMX needs no firewall changes. Finding nodes and showing whether yours answers does: the answers come *in* to PyLZR on UDP port 6454. The first time PyLZR listens (when you click **Find** or switch Control Mode to DMX), your firewall may ask about **Python**:
+
+- **Windows:** tick **both Private networks and Public networks**, then **Allow access**. A direct cable to the node has no router, so Windows calls it an *Unidentified network* and treats it as Public.
+  - **If you clicked Cancel or allowed only Private:** Windows Security → Firewall & network protection → **Allow an app through firewall** → **Change settings** → tick **Private** and **Public** for every **Python** entry → **OK**.
+- **macOS:** only if the firewall is on (System Settings → Network → Firewall). When asked whether Python may accept incoming network connections, click **Allow**.
+- **Linux:** desktops usually have no firewall running. If `ufw` is on, run `sudo ufw allow 6454/udp`.
+
+If the answers stay blocked, PyLZR still sends DMX normally; you just won't see nodes in Find or the green indicator.
 
 ## Dependencies
 
