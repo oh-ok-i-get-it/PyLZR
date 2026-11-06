@@ -9,7 +9,7 @@ from ..core.app_logger import LOGGER_NAME, Tone, get_logger
 from ..core.output_switch import OutputSwitch
 from ..engine   import AudioEngine
 from ..midi     import MIDIOutput, KeyboardMapper
-from ..dmx      import DMXOutput, PortAddress
+from ..dmx      import DMXOutput, NodeDiscovery, PortAddress
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
 from .settings_panel  import SettingsPanel
@@ -47,8 +47,10 @@ class MainWindow(QWidget):
         # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
         self._open_saved_midi_port()
+        self.discovery = NodeDiscovery(parent=self)     # the app's one Art-Net listener
         self.dmx_out  = DMXOutput(self.store.get('dmx/node_ip'),
-                                  PortAddress(*self.store.get('dmx/port_address')), parent=self)
+                                  PortAddress(*self.store.get('dmx/port_address')), parent=self,
+                                  discovery=self.discovery)
         self.output   = OutputSwitch({'MIDI': self.midi_out, 'DMX': self.dmx_out}, CONTROL_MODES[0])
         self.engine   = AudioEngine(self.output, parent=self,
                                     device_name=self.store.get('audio/device') or None)
@@ -293,6 +295,7 @@ class MainWindow(QWidget):
         self._close_dmx_tester()
         self.engine.shutdown()
         self.dmx_out.close()        # blacks out the fixtures if DMX was sending
+        self.discovery.close()
         self.midi_out.close()
         logging.getLogger(LOGGER_NAME).removeHandler(self.log_panel.log_handler)
         super().closeEvent(event)

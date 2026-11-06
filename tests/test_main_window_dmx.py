@@ -5,8 +5,9 @@ import pytest
 from PyQt5.QtCore import Qt
 
 from fakes import udp as fake_udp
-from helpers import dmx_packets, note_ons, tone_chunks, wait_for_note_offs, wait_until
+from helpers import artpollreply, dmx_packets, note_ons, tone_chunks, wait_for_note_offs, wait_until
 from pylzr.core import AVG_COUNT_RATE_DEFAULT
+from pylzr.dmx import build_artpoll
 from pylzr.gui.settings_store import DEFAULTS, SettingsStore
 
 DEFAULT_NODE = ('10.201.6.100', 6454)
@@ -198,3 +199,21 @@ def test_control_mode_logged(harness, mode):
     log = harness.window.log_panel._text.toPlainText()
     assert f'Control mode: {mode}' in log
     assert 'not yet implemented' not in log
+
+
+# ── Node answers ─────────────────────────────────────────────────────────
+
+def test_node_that_answers_turns_the_indicator_green(harness):
+    w = harness.window
+    set_mode(harness, 'DMX')
+    assert ('10.201.6.100', 6454) in [to for data, to in fake_udp.sent if data == build_artpoll()]   # asked
+    fake_udp.arrive(artpollreply(), '10.201.6.100')
+    wait_until(lambda: w.settings_panel._dmx_val.toolTip() == 'CR011R answered · via 10.201.6.50')
+    assert w.dmx_out.state == 'connected'
+
+
+def test_closing_the_app_stops_listening(harness):
+    set_mode(harness, 'DMX')
+    harness.close()
+    listener = next(s for s in fake_udp.sockets if s.bound_to == ('', 6454))
+    assert listener.closed == 1

@@ -191,7 +191,8 @@ def test_tester_button(panel):
 
 
 @pytest.mark.parametrize('state, colour', [
-    ('off', '#383838'), ('sending', '#2ecc71'), ('warning', '#e3b341'), ('error', '#e74c3c'),
+    ('off', '#383838'), ('connected', '#2ecc71'), ('sending', '#58a6ff'), ('warning', '#e3b341'),
+    ('error', '#e74c3c'),
 ])
 def test_dmx_status_dot(panel, state, colour):
     panel.set_dmx_status(state, 'detail')

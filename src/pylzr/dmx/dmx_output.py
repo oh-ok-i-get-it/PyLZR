@@ -6,13 +6,19 @@ from PyQt5.QtCore import QObject, QTimer, Qt, pyqtSignal
 
 from ..core import DMX_CHANNELS, DMX_DEFAULT_NODE_IP, DMX_REFRESH_HZ
 from ..core.app_logger import Tone, get_logger
-from .artnet   import ARTNET_PORT, PortAddress, build_artdmx, next_sequence
+from .artnet   import ARTNET_PORT, PollReply, PortAddress, build_artdmx, next_sequence
+from .nodes    import NodeWatch
 from .udp      import UdpSender
 from .universe import DMXUniverse
 
 log = get_logger('dmx')
 
 _BLACKOUT = bytes(DMX_CHANNELS)
+
+# While sending, ask the node "are you there?" every 3 s (Art-Net suggests
+# 2.5–3 s); an answer counts for 10 s, so one lost reply doesn't matter.
+PING_TICKS   = 3 * DMX_REFRESH_HZ
+ANSWER_TICKS = 10 * DMX_REFRESH_HZ
 
 # Address blocks that can't share a network segment. Packets for a node in
 # one block leaving from an address in another went to a router, not down
@@ -24,6 +30,23 @@ _BLOCKS = [ipaddress.ip_network(n) for n in
 def _block(address: str) -> ipaddress.IPv4Network | None:
     ip = ipaddress.IPv4Address(address)
     return next((net for net in _BLOCKS if ip in net), None)
+
+
+def status_for(error: str | None, source: str | None, node_ip: str,
+               answered_by: str | None) -> tuple[str, str]:
+    """The (state, detail) to show while sending, from: the last send error,
+    the local address packets leave from (None: no route), and the name of
+    the node if it answered recently. Problems come first: an answer from
+    the node doesn't make a send error or a wrong route any better."""
+    if error:
+        return 'error', error
+    if source is None:
+        return 'error', 'no route to node'
+    if _block(source) != _block(node_ip):
+        return 'warning', f'via {source} — check cable / IP'
+    if answered_by:
+        return 'connected', f'{answered_by} answered · via {source}'
+    return 'sending', f'via {source}'
 
 
 class DMXOutput(QObject):
@@ -40,12 +63,19 @@ class DMXOutput(QObject):
     layer (the channel tester).
 
     status_changed(state, detail) is emitted only when either changes:
-      'off'      not sending                         'Off'
-      'sending'  packets leave towards the node      'via 10.201.6.50'
-      'warning'  they leave from an address on a     'via 192.168.1.20 — check cable / IP'
-                 different network (likely a router)
-      'error'    the OS refused to send              'network unreachable'
-    UDP has no acknowledgement, so 'sending' doesn't prove the node is there.
+      'off'        not sending                         'Off'
+      'connected'  sending, and the node answered      'CR011R answered · via 10.201.6.50'
+                   in the last 10 s
+      'sending'    packets leave towards the node,     'via 10.201.6.50'
+                   no answer (yet)
+      'warning'    they leave from an address on a     'via 192.168.1.20 — check cable / IP'
+                   different network (likely a router)
+      'error'      the OS refused to send              'network unreachable'
+    UDP has no acknowledgement, so 'sending' alone doesn't prove the node is
+    there. Given a discovery (a NodeDiscovery, or anything with ping(ip) and
+    a reply_received(PollReply) signal), the node is asked every 3 s while
+    sending, and its answers make the state 'connected'. Some nodes never
+    answer; they stay 'sending' and work just the same.
 
     press_note() accepts cues so DMX can stand in for MIDI; it does nothing
     until scenes exist (a later phase).
@@ -55,8 +85,10 @@ class DMXOutput(QObject):
 
     def __init__(self, node_ip: str = DMX_DEFAULT_NODE_IP, port: PortAddress | None = None,
                  parent: QObject | None = None,
-                 socket_factory: Callable[..., socket.socket] = socket.socket):
-        """port: Net:SubNet:Universe (default 0:0:0). An invalid node_ip raises ValueError."""
+                 socket_factory: Callable[..., socket.socket] = socket.socket,
+                 discovery=None):
+        """port: Net:SubNet:Universe (default 0:0:0). An invalid node_ip
+        raises ValueError. discovery: see above; None = never ask the node."""
         super().__init__(parent)
         self.universe = DMXUniverse()
         self.port = port or PortAddress()
@@ -67,6 +99,12 @@ class DMXOutput(QObject):
         self._source: str | None = None
         self._closed = False
         self.state, self.detail = 'off', 'Off'
+
+        self._discovery = discovery
+        self._watch = NodeWatch(PING_TICKS, ANSWER_TICKS)
+        self._answered_node: str | None = None    # node whose answer was last reported
+        if discovery is not None:
+            discovery.reply_received.connect(self._on_reply)
 
         self._timer = QTimer(self)
         self._timer.setTimerType(Qt.PreciseTimer)   # steady frame spacing
@@ -96,6 +134,8 @@ class DMXOutput(QObject):
             self._send(_BLACKOUT)
         self._sender.close()
         self._sender, self.port = sender, port
+        self._watch.restart()           # a different node: its answers start afresh
+        self._answered_node = None
         log.info(f'DMX: node {self.node_ip}, universe {port}', extra={'tone': Tone.MUTED})
         if self.active:
             self._check_route()
@@ -108,6 +148,7 @@ class DMXOutput(QObject):
         if self.active:
             return
         self._ticks = 0
+        self._watch.restart()
         self._check_route()
         self._timer.start()
         self._tick()                    # first frame now, not one interval later
@@ -118,6 +159,7 @@ class DMXOutput(QObject):
             return
         self._timer.stop()
         self._send(_BLACKOUT)
+        self._answered_node = None
         self._set_status('off', 'Off')
 
     def close(self):
@@ -147,7 +189,14 @@ class DMXOutput(QObject):
         self._ticks += 1
         if self._ticks % DMX_REFRESH_HZ == 0:     # once a second: has the route changed?
             self._check_route()
+        if self._watch.tick() and self._discovery is not None:
+            self._discovery.ping(self.node_ip)
         self._send(self.universe.frame())
+
+    def _on_reply(self, reply: PollReply):
+        if self.active and reply.ip == self.node_ip:
+            self._watch.heard(reply.short_name or reply.ip)
+            self._update_status()
 
     def _send(self, data: bytes):
         self._sequence = next_sequence(self._sequence)
@@ -159,15 +208,8 @@ class DMXOutput(QObject):
         self._source = self._sender.source_address()
 
     def _update_status(self):
-        error, source = self._sender.last_error, self._source
-        if error:
-            self._set_status('error', error)
-        elif source is None:
-            self._set_status('error', 'no route to node')
-        elif _block(source) != _block(self.node_ip):
-            self._set_status('warning', f'via {source} — check cable / IP')
-        else:
-            self._set_status('sending', f'via {source}')
+        self._set_status(*status_for(self._sender.last_error, self._source, self.node_ip,
+                                     self._watch.answered_by))
 
     def _set_status(self, state: str, detail: str):
         if (state, detail) == (self.state, self.detail):
@@ -180,7 +222,15 @@ class DMXOutput(QObject):
 
     def _log_status(self):
         target = f'{self.node_ip} (universe {self.port})'
-        if self.state == 'sending':
+        if self.state == 'connected':
+            self._answered_node = self.node_ip
+            log.info(f'DMX: {self._watch.answered_by} at {target} answered; sending via {self._source}',
+                     extra={'tone': Tone.ON})
+        elif self.state == 'sending' and self._answered_node == self.node_ip:
+            self._answered_node = None
+            log.warning(f'DMX: {target} stopped answering; still sending {self.detail}. '
+                        'Check the node is on and its cable is plugged in.')
+        elif self.state == 'sending':
             log.info(f'DMX: sending to {target} {self.detail}', extra={'tone': Tone.ON})
         elif self.state == 'warning':
             log.warning(f'DMX: packets for {target} leave via {self._source}, which is on a '

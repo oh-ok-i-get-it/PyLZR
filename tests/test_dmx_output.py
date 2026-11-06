@@ -1,12 +1,15 @@
 import errno
+import logging
 
 import pytest
+from PyQt5.QtCore import QObject, pyqtSignal
 
 from fakes import udp as fake_udp
 from fakes.udp import FakeSocket
-from helpers import dmx_packets as packets, wait_until
+from helpers import artpollreply, dmx_packets as packets, wait_until
 from pylzr.core import DMX_REFRESH_HZ
-from pylzr.dmx import DMXOutput, PortAddress
+from pylzr.dmx import DMXOutput, PortAddress, parse_artpollreply
+from pylzr.dmx.dmx_output import ANSWER_TICKS, PING_TICKS, status_for
 
 pytestmark = pytest.mark.usefixtures('qapp')     # QTimer needs a Qt application
 
@@ -209,3 +212,172 @@ def test_loopback_counts_as_the_same_network():
     out.start()
     assert (out.state, out.detail) == ('sending', 'via 127.0.0.1')
     out.close()
+
+
+# ── Status rules ─────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('error, source, answered_by, expected', [
+    (None, '10.201.6.50', None,     ('sending',   'via 10.201.6.50')),
+    (None, '10.201.6.50', 'CR011R', ('connected', 'CR011R answered · via 10.201.6.50')),
+    (None, '192.168.1.20', 'CR011R', ('warning',  'via 192.168.1.20 — check cable / IP')),
+    (None, None,          'CR011R', ('error',     'no route to node')),
+    ('host unreachable', '10.201.6.50', 'CR011R', ('error', 'host unreachable')),
+])
+def test_status_rules_put_problems_first(error, source, answered_by, expected):
+    assert status_for(error, source, '10.201.6.100', answered_by) == expected
+
+
+# ── Asking the node (with a discovery) ───────────────────────────────────
+
+class StubDiscovery(QObject):
+    """Records pings; tests emit the node's answers themselves."""
+
+    reply_received = pyqtSignal(object)
+
+    def __init__(self):
+        super().__init__()
+        self.pinged: list[str] = []
+
+    def ping(self, ip):
+        self.pinged.append(ip)
+
+    def answer(self, ip='10.201.6.100', **fields):
+        self.reply_received.emit(parse_artpollreply(artpollreply(ip=ip, **fields), ip))
+
+
+@pytest.fixture
+def discovery():
+    return StubDiscovery()
+
+
+@pytest.fixture
+def watched(discovery):
+    output = DMXOutput(socket_factory=FakeSocket, discovery=discovery)
+    yield output
+    output.close()
+
+
+@pytest.fixture
+def watched_statuses(watched):
+    received = []
+    watched.status_changed.connect(lambda state, detail: received.append((state, detail)))
+    return received
+
+
+def ticks(output, n):
+    for _ in range(n):
+        output._tick()
+
+
+def test_without_a_discovery_the_node_is_never_asked(out):
+    out.start()
+    ticks(out, 2 * PING_TICKS)
+    assert len(fake_udp.sent) == len(packets()) == 1 + 2 * PING_TICKS   # DMX frames, nothing else
+
+
+def test_asks_the_node_at_start_then_every_3_seconds(watched, discovery):
+    assert PING_TICKS == 3 * DMX_REFRESH_HZ
+    assert discovery.pinged == []                # not while stopped
+    watched.start()
+    assert discovery.pinged == ['10.201.6.100']
+    ticks(watched, PING_TICKS - 1)
+    assert len(discovery.pinged) == 1
+    watched._tick()
+    assert len(discovery.pinged) == 2
+
+
+def test_answer_turns_the_status_connected_at_once(watched, discovery, watched_statuses):
+    watched.start()
+    discovery.answer()
+    assert watched_statuses == [('sending', 'via 10.201.6.50'),
+                                ('connected', 'CR011R answered · via 10.201.6.50')]
+
+
+def test_node_without_a_name_is_shown_by_ip(watched, discovery):
+    watched.start()
+    discovery.answer(short_name=b'')
+    assert watched.detail == '10.201.6.100 answered · via 10.201.6.50'
+
+
+def test_answers_from_other_nodes_dont_count(watched, discovery):
+    watched.start()
+    discovery.answer(ip='10.201.6.101')
+    assert watched.state == 'sending'
+
+
+def test_answers_while_stopped_dont_count(watched, discovery, watched_statuses):
+    discovery.answer()
+    assert watched.state == 'off' and watched_statuses == []     # the indicator stays Off
+    watched.start()
+    assert watched.state == 'sending'
+
+
+def test_regular_answers_keep_it_connected(watched, discovery, watched_statuses):
+    watched.start()
+    for _ in range(5):
+        discovery.answer()
+        ticks(watched, PING_TICKS)
+    assert watched_statuses[-1][0] == 'connected' and len(watched_statuses) == 2
+
+
+def test_silence_for_10_seconds_falls_back_to_sending_with_a_warning(watched, discovery, caplog):
+    assert ANSWER_TICKS == 10 * DMX_REFRESH_HZ
+    watched.start()
+    discovery.answer()
+    with caplog.at_level(logging.INFO, logger='pylzr'):
+        ticks(watched, ANSWER_TICKS)
+        assert watched.state == 'connected'
+        watched._tick()
+    assert (watched.state, watched.detail) == ('sending', 'via 10.201.6.50')
+    assert [r.levelname for r in caplog.records if 'stopped answering' in r.getMessage()] == ['WARNING']
+
+
+def test_answer_is_logged(watched, discovery, caplog):
+    watched.start()
+    with caplog.at_level(logging.INFO, logger='pylzr'):
+        discovery.answer()
+    assert 'CR011R at 10.201.6.100 (universe 0:0:0) answered; sending via 10.201.6.50' in caplog.text
+
+
+def test_new_node_is_asked_at_once_and_old_answers_are_forgotten(watched, discovery, caplog):
+    watched.start()
+    discovery.answer()
+    with caplog.at_level(logging.INFO, logger='pylzr'):
+        watched.configure('10.201.6.101', PortAddress())
+    assert discovery.pinged == ['10.201.6.100', '10.201.6.101']
+    assert watched.state == 'sending'
+    assert 'stopped answering' not in caplog.text   # a different node, not a silent one
+
+
+def test_stop_stops_asking_and_restart_starts_fresh(watched, discovery, caplog):
+    watched.start()
+    discovery.answer()
+    watched.stop()
+    pinged = len(discovery.pinged)
+    with caplog.at_level(logging.INFO, logger='pylzr'):
+        watched.start()
+    assert len(discovery.pinged) == pinged + 1   # asked again at once
+    assert watched.state == 'sending'            # the old answer doesn't carry over
+    assert 'stopped answering' not in caplog.text
+
+
+def test_switching_away_and_back_is_not_a_node_going_quiet(watched, discovery, caplog):
+    """The old node's answer is forgotten on any change of node, so a later
+    hiccup on the same node isn't reported as it 'stopping answering'."""
+    watched.start()
+    discovery.answer()
+    watched.configure('10.201.6.101', PortAddress())
+    watched.configure('10.201.6.100', PortAddress())
+    fake_udp.fail_next.append(OSError(errno.ENETUNREACH, 'x'))
+    with caplog.at_level(logging.INFO, logger='pylzr'):
+        ticks(watched, 2)                        # error, then sending again
+    assert watched.state == 'sending'
+    assert 'stopped answering' not in caplog.text
+
+
+def test_a_problem_outranks_an_answer(watched, discovery):
+    watched.start()
+    discovery.answer()
+    fake_udp.route_from = '192.168.176.169'      # cable unplugged, Wi-Fi up
+    ticks(watched, DMX_REFRESH_HZ)               # next route check
+    assert watched.state == 'warning'

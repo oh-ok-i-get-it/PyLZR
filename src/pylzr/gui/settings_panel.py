@@ -80,12 +80,15 @@ _SM_STYLE = (
 )
 
 _IND_ON      = f'border-radius:5px; background:{theme.OK};'
+_IND_SENT    = f'border-radius:5px; background:{theme.ACCENT};'
 _IND_WARN    = f'border-radius:5px; background:{theme.WARN};'
 _IND_OFF     = f'border-radius:5px; background:{theme.ERROR};'
 _IND_NA      = 'border-radius:5px; background:#383838;'
 
-# DMXOutput status state -> indicator
-_DMX_DOTS = {'off': _IND_NA, 'sending': _IND_ON, 'warning': _IND_WARN, 'error': _IND_OFF}
+# DMXOutput status state -> indicator: green once the node answers, blue
+# while sending without an answer (some nodes never answer; not an error)
+_DMX_DOTS = {'off': _IND_NA, 'connected': _IND_ON, 'sending': _IND_SENT, 'warning': _IND_WARN,
+             'error': _IND_OFF}
 _CLIP_ON     = f'border-radius:3px; background:{theme.ERROR}; font-size:8px; color:#fff; padding:1px 3px;'
 _CLIP_OFF    = 'border-radius:3px; background:#252525; font-size:8px; color:#444; padding:1px 3px;'
 _DIV_STYLE   = 'background:#1e1e1e; border:none;'
@@ -533,7 +536,7 @@ class SettingsPanel(QWidget):
         self._midi_val.setText(label[:22] + ('…' if len(label) > 22 else ''))
 
     def set_dmx_status(self, state: str = 'off', detail: str = 'Off'):
-        """state: a DMXOutput status — 'off' | 'sending' | 'warning' | 'error'.
+        """state: a DMXOutput status — 'off' | 'connected' | 'sending' | 'warning' | 'error'.
         Long details are shortened; the full text is in the tooltip."""
         self._dmx_dot.setStyleSheet(_DMX_DOTS[state])
         self._dmx_val.setText(detail[:22] + ('…' if len(detail) > 22 else ''))
