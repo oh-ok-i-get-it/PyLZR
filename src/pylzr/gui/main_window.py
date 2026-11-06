@@ -108,8 +108,8 @@ class MainWindow(QWidget):
         self.settings_panel.control_mode_changed.connect(self._on_control_mode_changed)
         self.settings_panel.reset_requested.connect(self._reset_settings)
         self.settings_panel.audio_devices_refresh_requested.connect(self._rescan_audio_devices)
-        self.settings_panel.dmx_node_changed.connect(self._on_dmx_node_changed)
-        self.settings_panel.dmx_tester_requested.connect(self._open_dmx_tester)
+        self.settings_panel.dmx.node_changed.connect(self._on_dmx_node_changed)
+        self.settings_panel.dmx.tester_requested.connect(self._open_dmx_tester)
 
         # Restore saved settings through the panels (same path as user input),
         # then save every later change
@@ -137,7 +137,7 @@ class MainWindow(QWidget):
         panel.set_fft_window(get('analysis/fft_window'))
         panel.set_smoothing(get('display/smoothing'))
         panel.set_log_level(get('app/log_level'))
-        panel.set_dmx_node(get('dmx/node_ip'), get('dmx/port_address'))
+        panel.dmx.set_node(get('dmx/node_ip'), get('dmx/port_address'))
         panel.set_control_mode(get('app/control_mode'))
 
     def _save_changes(self):
@@ -247,7 +247,7 @@ class MainWindow(QWidget):
         else:
             self._close_dmx_tester()
             self.dmx_out.stop()
-        self.settings_panel.set_dmx_tester_enabled(dmx)
+        self.settings_panel.dmx.set_tester_enabled(dmx)
         log.info(f'Control mode: {mode}', extra={'tone': Tone.MUTED})
 
     def _on_dmx_node_changed(self, ip: str, port_address: list[int]):

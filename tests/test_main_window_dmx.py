@@ -18,7 +18,7 @@ def set_mode(harness, mode):
 
 
 def set_node(harness, ip, port_address):
-    harness.window.settings_panel.set_dmx_node(ip, port_address)
+    harness.window.settings_panel.dmx.set_node(ip, port_address)
 
 
 def frames():
@@ -39,7 +39,7 @@ def test_starts_in_midi_mode_sending_no_dmx(harness):
     assert w.output.active == 'MIDI'
     assert not w.dmx_out.active
     assert fake_udp.sent == []
-    assert not w.settings_panel._tester_btn.isEnabled()
+    assert not w.settings_panel.dmx._tester_btn.isEnabled()
     assert w.settings_panel._dmx_val.text() == 'Off'
 
 
@@ -51,7 +51,7 @@ def test_dmx_mode_sends_to_the_node_and_shows_status(harness):
     assert w.output.active == 'DMX' and w.dmx_out.active
     assert dmx_packets()[0]['to'] == DEFAULT_NODE
     assert w.settings_panel._dmx_val.text() == 'via 10.201.6.50'
-    assert w.settings_panel._tester_btn.isEnabled()
+    assert w.settings_panel.dmx._tester_btn.isEnabled()
     wait_until(lambda: len(dmx_packets()) >= 3)          # keeps streaming
 
 
@@ -85,7 +85,7 @@ def test_leaving_dmx_blacks_out_then_stops(harness, qapp):
     qapp.processEvents()
     assert len(fake_udp.sent) == sent and not w.dmx_out.active
     assert w.settings_panel._dmx_val.text() == 'Off'
-    assert not w.settings_panel._tester_btn.isEnabled()
+    assert not w.settings_panel.dmx._tester_btn.isEnabled()
 
 
 # ── Node settings ────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ def test_mode_node_and_universe_are_restored_after_restart(make_window):
     w = make_window().window
     assert w.output.active == 'DMX' and w.dmx_out.active
     assert w.settings_panel._mode_combo.currentData() == 'DMX'
-    assert w.settings_panel._node_ip_edit.text() == '10.201.6.101'
+    assert w.settings_panel.dmx._node_ip_edit.text() == '10.201.6.101'
     assert {(p['to'], p['sub_uni']) for p in dmx_packets()} == {(('10.201.6.101', 6454), 3)}  # never the default
 
 
@@ -137,7 +137,7 @@ def test_reset_returns_to_midi_and_the_default_node(harness):
 # ── Channel tester ───────────────────────────────────────────────────────
 
 def open_tester(harness):
-    harness.window.settings_panel._tester_btn.click()
+    harness.window.settings_panel.dmx._tester_btn.click()
     return harness.window._dmx_tester
 
 
