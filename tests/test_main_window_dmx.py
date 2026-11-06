@@ -217,3 +217,63 @@ def test_closing_the_app_stops_listening(harness):
     harness.close()
     listener = next(s for s in fake_udp.sockets if s.bound_to == ('', 6454))
     assert listener.closed == 1
+
+
+# ── Find ─────────────────────────────────────────────────────────────────
+
+def find(harness):
+    """Show the window (offscreen) and its settings, as a user would, and click Find."""
+    w = harness.window
+    w.show()
+    w._toggle_settings()
+    assert w.settings_panel.isVisible()
+    w.settings_panel.dmx._find_btn.click()
+    return w
+
+
+def test_find_asks_every_network_and_the_set_node(harness):
+    w = find(harness)
+    polls = [to for data, to in fake_udp.sent if data == build_artpoll()]
+    assert polls == [('10.255.255.255', 6454), ('10.201.6.100', 6454)]
+    assert not w.settings_panel.dmx._find_btn.isEnabled()          # searching
+    assert dmx_packets() == []                   # finding sends no DMX (MIDI mode)
+
+
+def test_picking_a_found_node_configures_and_saves_it(harness):
+    w = find(harness)
+    fake_udp.arrive(artpollreply(ip='10.201.6.120', subnet=1, sw_out=(4,)), '10.201.6.120')
+    w.discovery._finish_search()
+    dmx = w.settings_panel.dmx
+    assert dmx._find_btn.isEnabled()
+    [action] = dmx._nodes_menu.actions()
+    assert action.text() == 'CR011R · 10.201.6.120 · 0:1:4'
+    action.trigger()
+    assert (w.dmx_out.node_ip, str(w.dmx_out.port)) == ('10.201.6.120', '0:1:4')
+    store = SettingsStore()
+    assert (store.get('dmx/node_ip'), store.get('dmx/port_address')) == ('10.201.6.120', [0, 1, 4])
+    assert 'DMX: found CR011R · 10.201.6.120 · 0:1:4' in w.log_panel._text.toPlainText()
+
+
+def test_nothing_found_logs_what_to_check(harness):
+    w = find(harness)
+    w.discovery._finish_search()
+    assert 'no Art-Net nodes answered' in w.log_panel._text.toPlainText()
+    assert [a.text() for a in w.settings_panel.dmx._nodes_menu.actions()] == [
+        'No Art-Net nodes answered (see the log)']
+
+
+def test_settings_closed_during_the_search_shows_no_menu(harness):
+    w = find(harness)
+    w._toggle_settings()                         # closed
+    fake_udp.arrive(artpollreply(), '10.201.6.100')
+    w.discovery._finish_search()
+    assert w.settings_panel.dmx._nodes_menu is None
+    assert w.settings_panel.dmx._find_btn.isEnabled()
+    assert 'DMX: found CR011R · 10.201.6.100 · 0:0:0' in w.log_panel._text.toPlainText()
+
+
+def test_search_ends_by_itself_in_the_app(harness):
+    w = find(harness)
+    w.discovery._search_timer.setInterval(10)    # instead of 2 s
+    w.discovery._search_timer.start()
+    wait_until(lambda: w.settings_panel.dmx._find_btn.isEnabled())

@@ -3,6 +3,7 @@ channel tester button."""
 
 import pytest
 
+from pylzr.dmx import NodeChoice, PortAddress
 from pylzr.gui import DMXSettings
 
 
@@ -90,3 +91,63 @@ def test_tester_button(dmx):
     dmx._tester_btn.click()
     assert len(received) == 1
     assert 'live' in dmx._tester_btn.toolTip()
+
+
+# ── Find ─────────────────────────────────────────────────────────────────
+
+CR011R = NodeChoice('CR011R · 10.201.6.100 · 0:1:2', '10.201.6.100', PortAddress(0, 1, 2), 'Art-Net node')
+INPUT_ONLY = NodeChoice('CR011R · 10.201.6.101 — no DMX outputs (set it to Art-Net → DMX)', '10.201.6.101', None)
+
+
+def menu_entries(dmx):
+    return [(a.text(), a.isEnabled()) for a in dmx._nodes_menu.actions()]
+
+
+def test_find_button_asks_for_a_search_in_any_mode(dmx):
+    received = capture(dmx.find_requested)
+    assert dmx._find_btn.isEnabled()             # also before DMX mode is on
+    dmx._find_btn.click()
+    assert len(received) == 1
+
+
+def test_find_button_while_searching(dmx):
+    dmx.set_searching(True)
+    assert (dmx._find_btn.isEnabled(), dmx._find_btn.text()) == (False, '…')
+    dmx.set_searching(False)
+    assert (dmx._find_btn.isEnabled(), dmx._find_btn.text()) == (True, 'Find')
+
+
+def test_found_nodes_drop_down_under_the_find_button(dmx):
+    dmx.show_nodes([CR011R, INPUT_ONLY])
+    assert dmx._nodes_menu.isVisible()
+    assert menu_entries(dmx) == [(CR011R.label, True), (INPUT_ONLY.label, False)]
+    assert [a.toolTip() for a in dmx._nodes_menu.actions()] == ['Art-Net node', INPUT_ONLY.label]
+
+
+def test_picking_a_node_sets_ip_and_universe_once(dmx):
+    received = capture(dmx.node_changed)
+    dmx.show_nodes([CR011R])
+    dmx._nodes_menu.actions()[0].trigger()
+    assert received == [('10.201.6.100', [0, 1, 2])]
+    assert dmx._node_ip_edit.text() == '10.201.6.100'
+    assert [s.value() for s in dmx._port_spins] == [0, 1, 2]
+
+
+def test_entry_that_cant_be_chosen_does_nothing(dmx):
+    received = capture(dmx.node_changed)
+    dmx.show_nodes([INPUT_ONLY])
+    dmx._nodes_menu.actions()[0].trigger()       # disabled: Qt ignores it
+    assert received == []
+
+
+def test_nothing_found_says_so(dmx):
+    dmx.show_nodes([])
+    assert menu_entries(dmx) == [('No Art-Net nodes answered (see the log)', False)]
+
+
+def test_a_new_search_replaces_the_old_menu(dmx):
+    dmx.show_nodes([CR011R])
+    old = dmx._nodes_menu
+    dmx.show_nodes([])
+    assert not old.isVisible() and dmx._nodes_menu is not old
+    assert len(dmx._nodes_menu.actions()) == 1

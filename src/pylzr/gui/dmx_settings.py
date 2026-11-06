@@ -1,11 +1,14 @@
+from collections.abc import Sequence
+
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QSpinBox, QAbstractSpinBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QSpinBox, QAbstractSpinBox, QMenu,
 )
-from PyQt5.QtCore import QRegularExpression, pyqtSignal
+from PyQt5.QtCore import QPoint, QRegularExpression, pyqtSignal
 from PyQt5.QtGui import QRegularExpressionValidator
 
 from ..core import DMX_DEFAULT_NODE_IP
-from ..dmx import is_ipv4
+from ..dmx import NodeChoice, is_ipv4
+from . import theme
 from .panel_style import INPUT_STYLE, SMALL_BUTTON_STYLE, label, pad, section
 
 # Accepts what can still become an IPv4 address while typing; is_ipv4()
@@ -14,23 +17,38 @@ _IPV4_TYPING = QRegularExpression(r'^(\d{1,3}(\.\d{0,3}){0,3})?$')
 
 _TESTER_TIP_ON  = 'Open a window with one slider per DMX channel. Values go out live.'
 _TESTER_TIP_OFF = 'Set Control Mode to DMX to use the channel tester.'
+_FIND_TIP       = ('Look for Art-Net nodes on the network (takes 2 seconds), then pick one to fill in '
+                   'its IP address and universe.')
+_NONE_FOUND     = 'No Art-Net nodes answered (see the log)'
+
+_MENU_STYLE = (
+    'QMenu { background: #1a1a1a; color: #c9d1d9; border: 1px solid #333; font-size: 10px; }'
+    'QMenu::item { padding: 4px 12px; }'
+    f'QMenu::item:selected {{ background: #252525; color: {theme.ACCENT}; }}'
+    'QMenu::item:disabled { color: #555555; }'
+)
 
 
 class DMXSettings(QWidget):
     """The DMX (ART-NET) section of the settings panel: the Art-Net node's
-    IP address, its universe (Net / Sub / Uni) and the channel tester button.
+    IP address with a Find button, its universe (Net / Sub / Uni) and the
+    channel tester button.
 
     Signals:
         node_changed(str, list) — node IP, [net, subnet, universe]; only
                                   valid values, only when they change
         tester_requested()      — 'Channel tester…' clicked
+        find_requested()        — 'Find' clicked
 
     set_node() changes the fields as if the user had, emitting node_changed
-    when the values change (used to restore saved settings).
+    when the values change (used to restore saved settings). After a search,
+    show_nodes() lists what was found under the Find button; picking a node
+    goes through set_node().
     """
 
     node_changed     = pyqtSignal(str, list)
     tester_requested = pyqtSignal()
+    find_requested   = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -59,6 +77,14 @@ class DMXSettings(QWidget):
         self._node_ip_edit.editingFinished.connect(self._on_node_ip_edited)
         row.addWidget(label('Node IP'))
         row.addWidget(self._node_ip_edit)
+
+        self._find_btn = QPushButton('Find')
+        self._find_btn.setFixedHeight(22)
+        self._find_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        self._find_btn.setToolTip(_FIND_TIP)
+        self._find_btn.clicked.connect(lambda: self.find_requested.emit())
+        row.addWidget(self._find_btn)
+        self._nodes_menu: QMenu | None = None
         row.addSpacing(6)
 
         self._port_spins = []
@@ -103,6 +129,33 @@ class DMXSettings(QWidget):
     def set_tester_enabled(self, enabled: bool):
         self._tester_btn.setEnabled(enabled)
         self._tester_btn.setToolTip(_TESTER_TIP_ON if enabled else _TESTER_TIP_OFF)
+
+    def set_searching(self, searching: bool):
+        """While a search runs, Find is disabled and shows '…'."""
+        self._find_btn.setEnabled(not searching)
+        self._find_btn.setText('…' if searching else 'Find')
+
+    def show_nodes(self, choices: Sequence[NodeChoice]):
+        """Drop down a menu of the nodes found under the Find button (never
+        blocks). Choosing one sets the node; entries that can't be chosen
+        are greyed out, with the reason in their label."""
+        if self._nodes_menu is not None:
+            self._nodes_menu.close()
+            self._nodes_menu.deleteLater()
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_STYLE)
+        menu.setToolTipsVisible(True)
+        for choice in choices:
+            action = menu.addAction(choice.label)
+            action.setToolTip(choice.tooltip)        # Qt shows the label if this is empty
+            action.setEnabled(choice.enabled)
+            if choice.enabled:
+                port = [choice.port.net, choice.port.subnet, choice.port.universe]
+                action.triggered.connect(lambda _checked, ip=choice.ip, port=port: self.set_node(ip, port))
+        if not choices:
+            menu.addAction(_NONE_FOUND).setEnabled(False)
+        self._nodes_menu = menu
+        menu.popup(self._find_btn.mapToGlobal(QPoint(0, self._find_btn.height())))
 
     # ── Private signal handlers ───────────────────────────────────────────
 
