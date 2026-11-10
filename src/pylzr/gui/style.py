@@ -9,19 +9,99 @@ setStyleSheet() still wins over these rules where both set the same thing.
 from pathlib import Path
 
 import pyqtgraph as pg
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QPalette
+from PyQt5.QtCore import QByteArray, QPointF, QRectF, Qt
+from PyQt5.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap, QRadialGradient
+from PyQt5.QtSvg import QSvgRenderer
 from PyQt5.QtWidgets import QApplication, QStyleFactory
 
 from . import theme
 
 ASSETS = Path(__file__).parent / 'assets'
 FONTS  = ASSETS / 'fonts'
+ICONS  = ASSETS / 'icons'
 
 
 def rgba(hex_color: str, alpha: float) -> str:
     """'#58a6ff', 0.2 -> 'rgba(88, 166, 255, 0.2)' for tinted fills in stylesheets."""
     c = QColor(hex_color)
     return f'rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})'
+
+
+def mix(color: str, base: str, amount: float) -> str:
+    """`amount` of `color` over `base`, as a hex colour (0 gives base, 1 gives color).
+    For tints that must be solid, e.g. a band-coloured border on a dark tile."""
+    a, b = QColor(color), QColor(base)
+    blend = [round(x * amount + y * (1 - amount)) for x, y in
+             ((a.red(), b.red()), (a.green(), b.green()), (a.blue(), b.blue()))]
+    return '#{:02x}{:02x}{:02x}'.format(*blend)
+
+
+# ── Icons ─────────────────────────────────────────────────────────────────────
+
+def _pixmap(size: int) -> QPixmap:
+    """Transparent square pixmap, drawn at 2x (or the screen's ratio) so it stays sharp."""
+    app = QApplication.instance()
+    ratio = max(2.0, app.devicePixelRatio() if app else 1.0)
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(Qt.transparent)
+    return pm
+
+
+def _svg_pixmap(name: str, color: str, size: int) -> QPixmap:
+    """assets/icons/<name>.svg drawn in `color` (the SVG strokes with currentColor)."""
+    path = ICONS / f'{name}.svg'
+    if not path.is_file():
+        return QPixmap()
+    renderer = QSvgRenderer(QByteArray(path.read_text(encoding='utf-8').replace('currentColor', color).encode()))
+    if not renderer.isValid():
+        return QPixmap()
+    pm = _pixmap(size)
+    painter = QPainter(pm)
+    renderer.render(painter, QRectF(0, 0, size, size))
+    painter.end()
+    return pm
+
+
+def icon(name: str, color: str, on_color: str | None = None, size: int = 16) -> QIcon:
+    """A line icon from assets/icons in theme colours. With `on_color`, a checked
+    button shows the icon in that colour instead. Null if the icon can't be
+    drawn, so callers can keep their text as a fallback."""
+    normal = _svg_pixmap(name, color, size)
+    if normal.isNull():
+        return QIcon()
+    result = QIcon()
+    result.addPixmap(normal, QIcon.Normal, QIcon.Off)
+    result.addPixmap(_svg_pixmap(name, on_color or color, size), QIcon.Normal, QIcon.On)
+    return result
+
+
+def status_dot_icon(off_color: str, on_color: str, size: int = 16) -> QIcon:
+    """A small dot: plain `off_color` when off, `on_color` with a soft halo when on
+    (stylesheets can't blur, so the halo lives in the icon)."""
+    def draw(color: str, halo: bool) -> QPixmap:
+        pm = _pixmap(size)
+        painter = QPainter(pm)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        centre = QPointF(size / 2, size / 2)
+        if halo:
+            glow = QRadialGradient(centre, size / 2)
+            for stop, alpha in ((0.0, 0.55), (0.55, 0.3), (1.0, 0.0)):
+                c = QColor(color)
+                c.setAlphaF(alpha)
+                glow.setColorAt(stop, c)
+            painter.setBrush(glow)
+            painter.drawEllipse(centre, size / 2, size / 2)
+        painter.setBrush(QColor(color))
+        painter.drawEllipse(centre, size * 0.28, size * 0.28)
+        painter.end()
+        return pm
+
+    result = QIcon()
+    result.addPixmap(draw(off_color, False), QIcon.Normal, QIcon.Off)
+    result.addPixmap(draw(on_color, True), QIcon.Normal, QIcon.On)
+    return result
 
 
 def load_fonts() -> set[str]:
@@ -79,13 +159,14 @@ QToolTip {{
 
 QGroupBox {{
     background: {t.CARD}; border: 1px solid {t.BORDER}; border-radius: {t.RADIUS_CARD}px;
-    margin-top: 0px; padding: 24px 10px 6px 10px;
+    margin-top: 0px; padding: 22px 10px 6px 10px;
+    font-size: {t.SIZE_SECTION}px; font-weight: 600;   /* the title's font; Qt ignores fonts on ::title */
 }}
 QGroupBox::title {{
     subcontrol-origin: padding; subcontrol-position: top left;
-    left: 12px; top: 8px;
-    color: {t.ACCENT}; font-size: {t.SIZE_SECTION}px; font-weight: 600;
+    left: 12px; top: 9px; color: {t.ACCENT};
 }}
+QGroupBox QLabel {{ font-size: {t.SIZE_BODY}px; font-weight: normal; }}
 
 QPushButton {{
     background: {t.BUTTON}; color: {t.TEXT};

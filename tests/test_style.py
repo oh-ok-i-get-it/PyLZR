@@ -67,6 +67,31 @@ def test_rgba():
     assert style.rgba('#58a6ff', 0.2) == 'rgba(88, 166, 255, 0.2)'
 
 
+def test_mix():
+    assert style.mix('#ffffff', '#000000', 0.5) == '#808080'
+    assert style.mix('#2ecc71', '#000000', 0) == '#000000'
+    assert style.mix('#2ecc71', '#000000', 1) == '#2ecc71'
+
+
+def test_icons_draw_in_theme_colours(qapp):
+    gear = style.icon('settings', theme.TEXT_DIM, on_color=theme.ACCENT)
+    assert not gear.isNull()
+    assert style.icon('no-such-icon', theme.TEXT).isNull()      # callers keep their text then
+    assert not style.status_dot_icon(theme.DISABLED, theme.OK).isNull()
+
+
+def test_every_icon_set_ships_with_its_licence():
+    assert list(style.ICONS.glob('*.svg'))
+    assert (style.ICONS / 'Lucide-LICENSE.txt').is_file()
+
+
+def test_control_panel_gear_is_an_icon(qapp):
+    from pylzr.gui.control_panel import ControlPanel
+    panel = ControlPanel()
+    assert not panel.gear_button.icon().isNull()
+    assert panel.gear_button.size().width() == 30 and panel.gear_button.isCheckable()
+
+
 def test_main_window_builds_and_works_styled(styled_app, make_window):
     """The look changes nothing about behaviour: the window builds, and the
     Sound Mode button and status line still do what they did."""
