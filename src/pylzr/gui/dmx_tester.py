@@ -72,6 +72,7 @@ class DMXTesterWindow(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(_WINDOW_STYLE)
         self.setWindowTitle('DMX Channel Tester')
+        style.dark_title_bar(self)                 # Windows only; no-op elsewhere
 
         self._sliders: list[QSlider] = []
         self._value_boxes: list[QSpinBox] = []

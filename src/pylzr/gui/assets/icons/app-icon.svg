@@ -1,0 +1,7 @@
+<!-- Placeholder app icon until the real one is ready. To use the real icon, add
+     app-icon.ico or app-icon.png next to this file (they take precedence), or
+     replace this file. No code change is needed (see gui/style.py, APP_ICON_FILES). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="3" y="3" width="58" height="58" rx="14" fill="#0d0d0d" stroke="#5f6368" stroke-width="3" stroke-dasharray="7 5"/>
+  <circle cx="32" cy="32" r="9" fill="#58a6ff"/>
+</svg>

@@ -6,13 +6,16 @@ before any window is built. It only changes how widgets look. A widget's own
 setStyleSheet() still wins over these rules where both set the same thing.
 """
 
+import sys
 from pathlib import Path
 
 import pyqtgraph as pg
 from PyQt5.QtCore import QByteArray, QPointF, QRectF, Qt
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap, QRadialGradient
+from PyQt5.QtGui import (
+    QColor, QFont, QFontDatabase, QGuiApplication, QIcon, QPainter, QPalette, QPixmap, QRadialGradient,
+)
 from PyQt5.QtSvg import QSvgRenderer
-from PyQt5.QtWidgets import QApplication, QStyleFactory
+from PyQt5.QtWidgets import QApplication, QStyleFactory, QWidget
 
 from . import theme
 
@@ -20,6 +23,15 @@ ASSETS = Path(__file__).parent / 'assets'
 FONTS  = ASSETS / 'fonts'
 ICONS  = ASSETS / 'icons'
 COMBO_ARROW = ICONS / 'combo-arrow.svg'   # drawn in theme.TEXT_DIM (stylesheet images can't be recoloured)
+
+# The app icon: the first of these that exists. app-icon.svg is a placeholder;
+# drop in the real icon as app-icon.ico / .png (or replace the .svg).
+APP_ICON_FILES = ('app-icon.ico', 'app-icon.png', 'app-icon.svg')
+_APP_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
+
+# DwmSetWindowAttribute: DWMWA_USE_IMMERSIVE_DARK_MODE is 20, and was 19
+# before Windows 10 20H1
+_DARK_MODE_ATTRIBUTES = (20, 19)
 
 
 def rgba(hex_color: str, alpha: float) -> str:
@@ -49,19 +61,62 @@ def _pixmap(size: int) -> QPixmap:
     return pm
 
 
+def _render_svg(svg: str, pm: QPixmap, size: int) -> QPixmap:
+    """Draw SVG text into `pm` (logical size `size`); null pixmap if it isn't valid SVG."""
+    renderer = QSvgRenderer(QByteArray(svg.encode()))
+    if not renderer.isValid():
+        return QPixmap()
+    painter = QPainter(pm)
+    renderer.render(painter, QRectF(0, 0, size, size))
+    painter.end()
+    return pm
+
+
 def _svg_pixmap(name: str, color: str, size: int) -> QPixmap:
     """assets/icons/<name>.svg drawn in `color` (the SVG strokes with currentColor)."""
     path = ICONS / f'{name}.svg'
     if not path.is_file():
         return QPixmap()
-    renderer = QSvgRenderer(QByteArray(path.read_text(encoding='utf-8').replace('currentColor', color).encode()))
-    if not renderer.isValid():
-        return QPixmap()
-    pm = _pixmap(size)
-    painter = QPainter(pm)
-    renderer.render(painter, QRectF(0, 0, size, size))
-    painter.end()
-    return pm
+    return _render_svg(path.read_text(encoding='utf-8').replace('currentColor', color), _pixmap(size), size)
+
+
+def app_icon() -> QIcon:
+    """The window / taskbar icon from APP_ICON_FILES; null if none can be read."""
+    for name in APP_ICON_FILES:
+        path = ICONS / name
+        if not path.is_file():
+            continue
+        if path.suffix == '.svg':
+            result = QIcon()
+            svg = path.read_text(encoding='utf-8')
+            for size in _APP_ICON_SIZES:
+                pm = QPixmap(size, size)
+                pm.fill(Qt.transparent)
+                pm = _render_svg(svg, pm, size)
+                if not pm.isNull():
+                    result.addPixmap(pm)
+        else:
+            result = QIcon(str(path))
+        if not result.isNull():
+            return result
+    return QIcon()
+
+
+def dark_title_bar(window: QWidget) -> bool:
+    """Ask Windows 10 (20H1 or later) / 11 to draw `window`'s title bar dark.
+    Returns whether Windows accepted it. Does nothing, and returns False, on
+    other systems, offscreen, for non-window widgets, or if the call fails."""
+    if sys.platform != 'win32' or QGuiApplication.platformName() != 'windows' or not window.isWindow():
+        return False
+    try:
+        import ctypes
+        hwnd = ctypes.c_void_p(int(window.winId()))
+        on = ctypes.c_int(1)
+        dwm = ctypes.windll.dwmapi
+        return any(dwm.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(on), ctypes.sizeof(on)) == 0
+                   for attribute in _DARK_MODE_ATTRIBUTES)
+    except (AttributeError, OSError):
+        return False
 
 
 def icon(name: str, color: str, on_color: str | None = None, size: int = 16) -> QIcon:
@@ -254,3 +309,6 @@ def apply(app: QApplication) -> None:
         app.setFont(font)
     app.setStyleSheet(stylesheet())
     pg.setConfigOptions(background=theme.BG, foreground=theme.AXIS)
+    window_icon = app_icon()
+    if not window_icon.isNull():
+        app.setWindowIcon(window_icon)

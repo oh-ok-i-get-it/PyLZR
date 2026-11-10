@@ -4,6 +4,7 @@ everything back afterwards and other tests keep running unstyled."""
 
 import pyqtgraph as pg
 import pytest
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFontDatabase, QPalette
 
 from pylzr.gui import style, theme
@@ -89,6 +90,25 @@ def test_dropdown_arrow_matches_the_theme():
 def test_every_icon_set_ships_with_its_licence():
     assert list(style.ICONS.glob('*.svg'))
     assert (style.ICONS / 'Lucide-LICENSE.txt').is_file()
+
+
+def test_placeholder_app_icon_is_set(styled_app):
+    assert (style.ICONS / 'app-icon.svg').is_file()
+    assert not style.app_icon().isNull()
+    assert not styled_app.windowIcon().isNull()
+
+
+def test_dark_title_bar_does_nothing_offscreen(qapp):
+    from PyQt5.QtWidgets import QWidget
+    window, child = QWidget(), QWidget()
+    child.setParent(window)
+    assert style.dark_title_bar(window) is False      # the tests run offscreen
+    assert style.dark_title_bar(child) is False       # never on a non-window widget
+    assert not child.testAttribute(Qt.WA_NativeWindow)
+
+
+def test_window_title_is_the_app_name(make_window):
+    assert make_window().window.windowTitle() == 'PyLZR'
 
 
 def test_control_panel_gear_is_an_icon(qapp):

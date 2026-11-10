@@ -10,6 +10,7 @@ from ..core.output_switch import OutputSwitch
 from ..engine   import AudioEngine
 from ..midi     import MIDIOutput, KeyboardMapper
 from ..dmx      import DMXOutput, NodeDiscovery, PortAddress, node_choices
+from .                import style
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
 from .settings_panel  import SettingsPanel
@@ -35,7 +36,8 @@ class MainWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('PyLZR : SSP3CTRUM')
+        self.setWindowTitle('PyLZR')
+        style.dark_title_bar(self)                 # Windows only; no-op elsewhere
         self.setGeometry(100, 100, WINDOW_W, WINDOW_H)
 
         # Console first, so subsystem startup messages show in it
