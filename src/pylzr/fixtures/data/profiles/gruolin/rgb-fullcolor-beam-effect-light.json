@@ -1,0 +1,1578 @@
+{
+  "$schema": "https://raw.githubusercontent.com/OpenLightingProject/open-fixture-library/master/schemas/fixture.json",
+  "name": "RGB Fullcolor Beam Effect Light",
+  "shortName": "Gruolin RGB Beam",
+  "categories": ["Laser"],
+  "meta": {
+    "authors": ["Hayden"],
+    "createDate": "2026-11-10",
+    "lastModifyDate": "2026-11-10"
+  },
+  "comment": "A dual-output RGB laser: two patterns, each with its own size, position, colour and motion channels (36-channel mode). From the printed manual, checked on the laser; \"helpWanted\" marks what is assumed rather than checked.",
+  "availableChannels": {
+    "On/Off": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "ShutterStrobe",
+          "shutterEffect": "Closed",
+          "comment": "Light off"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "ShutterStrobe",
+          "shutterEffect": "Open",
+          "comment": "Light on: every value above 0 is fully on (the manual says 1–100 %; checked on the laser)"
+        }
+      ]
+    },
+    "Auto Speed": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 26],
+          "type": "Generic",
+          "comment": "Default auto speed"
+        },
+        {
+          "dmxRange": [27, 127],
+          "type": "EffectSpeed",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Auto and dynamic effect speed; a static pattern needs a colour change effect to show it"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "SoundSensitivity",
+          "soundSensitivityStart": "low",
+          "soundSensitivityEnd": "high"
+        }
+      ]
+    },
+    "Pattern Group": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 15],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 1",
+          "helpWanted": "The manual lists 1–15; is 0 the same?"
+        },
+        {
+          "dmxRange": [16, 31],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 2"
+        },
+        {
+          "dmxRange": [32, 47],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 3"
+        },
+        {
+          "dmxRange": [48, 63],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 4"
+        },
+        {
+          "dmxRange": [64, 127],
+          "type": "Effect",
+          "effectName": "Animation patterns"
+        },
+        {
+          "dmxRange": [128, 143],
+          "type": "Effect",
+          "effectName": "Dynamic line effects, folder 1",
+          "comment": "Dynamic effects ignore the size, position, colour and motion channels"
+        },
+        {
+          "dmxRange": [144, 159],
+          "type": "Effect",
+          "effectName": "Dynamic line effects, folder 2"
+        },
+        {
+          "dmxRange": [160, 175],
+          "type": "Effect",
+          "effectName": "Dynamic animation effects"
+        },
+        {
+          "dmxRange": [176, 255],
+          "type": "Effect",
+          "effectName": "Dynamic line effects, folder 3"
+        }
+      ]
+    },
+    "Pattern Selection": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "Generic",
+          "comment": "No pattern: this output stays dark (checked with the second pattern on)"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "Effect",
+          "effectName": "Pattern",
+          "comment": "One pattern per 5 values; with a dynamic group on Pattern Group: 0–1 play all, then one effect per 2 values"
+        }
+      ]
+    },
+    "Pattern Size": {
+      "capability": {
+        "type": "Zoom",
+        "angleStart": "wide",
+        "angleEnd": "narrow",
+        "comment": "Pattern size, large to small"
+      }
+    },
+    "Horizontal Position": {
+      "defaultValue": 128,
+      "capability": {
+        "type": "BeamPosition",
+        "horizontalAngleStart": "left",
+        "horizontalAngleEnd": "right",
+        "comment": "128 = centre (needed to see the pattern); off-screen positions are blanked"
+      }
+    },
+    "Vertical Position": {
+      "defaultValue": 128,
+      "capability": {
+        "type": "BeamPosition",
+        "verticalAngleStart": "bottom",
+        "verticalAngleEnd": "top",
+        "comment": "128 = centre (needed to see the pattern); off-screen positions are blanked"
+      }
+    },
+    "Color": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "ColorPreset",
+          "colors": ["#ffffff"],
+          "comment": "White"
+        },
+        {
+          "dmxRange": [1, 3],
+          "type": "ColorPreset",
+          "comment": "Original colours (the pattern's own)"
+        },
+        {
+          "dmxRange": [4, 7],
+          "type": "ColorPreset",
+          "colors": ["#ffffff"],
+          "comment": "White"
+        },
+        {
+          "dmxRange": [8, 11],
+          "type": "ColorPreset",
+          "colors": ["#ff0000"],
+          "comment": "Red"
+        },
+        {
+          "dmxRange": [12, 15],
+          "type": "ColorPreset",
+          "colors": ["#ffff00"],
+          "comment": "Yellow"
+        },
+        {
+          "dmxRange": [16, 19],
+          "type": "ColorPreset",
+          "colors": ["#00ff00"],
+          "comment": "Green"
+        },
+        {
+          "dmxRange": [20, 23],
+          "type": "ColorPreset",
+          "colors": ["#00ffff"],
+          "comment": "Cyan"
+        },
+        {
+          "dmxRange": [24, 27],
+          "type": "ColorPreset",
+          "colors": ["#0000ff"],
+          "comment": "Blue"
+        },
+        {
+          "dmxRange": [28, 31],
+          "type": "ColorPreset",
+          "colors": ["#ff00ff"],
+          "comment": "Magenta (looks purple)"
+        },
+        {
+          "dmxRange": [32, 35],
+          "type": "Effect",
+          "effectName": "Colourful change",
+          "comment": "Colour effects (32–255) run at the speed set on Color Speed",
+          "helpWanted": "Does it jump between colours or fade?"
+        },
+        {
+          "dmxRange": [36, 39],
+          "type": "Effect",
+          "effectName": "Red, green and blue change"
+        },
+        {
+          "dmxRange": [40, 43],
+          "type": "Effect",
+          "effectName": "Original colourful change"
+        },
+        {
+          "dmxRange": [44, 47],
+          "type": "Effect",
+          "effectName": "Flowing water 1"
+        },
+        {
+          "dmxRange": [48, 51],
+          "type": "Effect",
+          "effectName": "Flowing water 2"
+        },
+        {
+          "dmxRange": [52, 55],
+          "type": "Effect",
+          "effectName": "Flowing water 3"
+        },
+        {
+          "dmxRange": [56, 59],
+          "type": "Effect",
+          "effectName": "Flowing water 4"
+        },
+        {
+          "dmxRange": [60, 63],
+          "type": "Effect",
+          "effectName": "Flowing water 5"
+        },
+        {
+          "dmxRange": [64, 67],
+          "type": "Effect",
+          "effectName": "Flowing water 6"
+        },
+        {
+          "dmxRange": [68, 71],
+          "type": "Effect",
+          "effectName": "Flowing water 7"
+        },
+        {
+          "dmxRange": [72, 75],
+          "type": "Effect",
+          "effectName": "Flowing water 8"
+        },
+        {
+          "dmxRange": [76, 79],
+          "type": "Effect",
+          "effectName": "Flowing water 9"
+        },
+        {
+          "dmxRange": [80, 83],
+          "type": "Effect",
+          "effectName": "Flowing water 10"
+        },
+        {
+          "dmxRange": [84, 87],
+          "type": "Effect",
+          "effectName": "Flowing water 11"
+        },
+        {
+          "dmxRange": [88, 91],
+          "type": "Effect",
+          "effectName": "Flowing water 12"
+        },
+        {
+          "dmxRange": [92, 95],
+          "type": "Effect",
+          "effectName": "Flowing water 13"
+        },
+        {
+          "dmxRange": [96, 99],
+          "type": "Effect",
+          "effectName": "Flowing water 14"
+        },
+        {
+          "dmxRange": [100, 103],
+          "type": "Effect",
+          "effectName": "Flowing water 15"
+        },
+        {
+          "dmxRange": [104, 107],
+          "type": "Effect",
+          "effectName": "Flowing water 16"
+        },
+        {
+          "dmxRange": [108, 111],
+          "type": "Effect",
+          "effectName": "Flowing water 17"
+        },
+        {
+          "dmxRange": [112, 115],
+          "type": "Effect",
+          "effectName": "Flowing water 18"
+        },
+        {
+          "dmxRange": [116, 119],
+          "type": "Effect",
+          "effectName": "Flowing water 19"
+        },
+        {
+          "dmxRange": [120, 123],
+          "type": "Effect",
+          "effectName": "Flowing water 20"
+        },
+        {
+          "dmxRange": [124, 127],
+          "type": "Effect",
+          "effectName": "Flowing water 21"
+        },
+        {
+          "dmxRange": [128, 131],
+          "type": "Effect",
+          "effectName": "Flowing water 22"
+        },
+        {
+          "dmxRange": [132, 135],
+          "type": "Effect",
+          "effectName": "Flowing water 23"
+        },
+        {
+          "dmxRange": [136, 139],
+          "type": "Effect",
+          "effectName": "Flowing water 24"
+        },
+        {
+          "dmxRange": [140, 143],
+          "type": "Effect",
+          "effectName": "Flowing water 25"
+        },
+        {
+          "dmxRange": [144, 147],
+          "type": "Effect",
+          "effectName": "Flowing water 26"
+        },
+        {
+          "dmxRange": [148, 151],
+          "type": "Effect",
+          "effectName": "Flowing water 27"
+        },
+        {
+          "dmxRange": [152, 155],
+          "type": "Effect",
+          "effectName": "Flowing water 28"
+        },
+        {
+          "dmxRange": [156, 159],
+          "type": "Effect",
+          "effectName": "Flowing water 29"
+        },
+        {
+          "dmxRange": [160, 163],
+          "type": "Effect",
+          "effectName": "Flowing water 30"
+        },
+        {
+          "dmxRange": [164, 167],
+          "type": "Effect",
+          "effectName": "Flowing water 31"
+        },
+        {
+          "dmxRange": [168, 171],
+          "type": "Effect",
+          "effectName": "Flowing water 32"
+        },
+        {
+          "dmxRange": [172, 175],
+          "type": "Effect",
+          "effectName": "Flowing water 33"
+        },
+        {
+          "dmxRange": [176, 179],
+          "type": "Effect",
+          "effectName": "Flowing water 34"
+        },
+        {
+          "dmxRange": [180, 183],
+          "type": "Effect",
+          "effectName": "Flowing water 35"
+        },
+        {
+          "dmxRange": [184, 187],
+          "type": "Effect",
+          "effectName": "Flowing water 36"
+        },
+        {
+          "dmxRange": [188, 191],
+          "type": "Effect",
+          "effectName": "Flowing water 37"
+        },
+        {
+          "dmxRange": [192, 195],
+          "type": "Effect",
+          "effectName": "Flowing water 38"
+        },
+        {
+          "dmxRange": [196, 199],
+          "type": "Effect",
+          "effectName": "Flowing water 39"
+        },
+        {
+          "dmxRange": [200, 203],
+          "type": "Effect",
+          "effectName": "Flowing water 40"
+        },
+        {
+          "dmxRange": [204, 207],
+          "type": "Effect",
+          "effectName": "Flowing water 41"
+        },
+        {
+          "dmxRange": [208, 211],
+          "type": "Effect",
+          "effectName": "Flowing water 42"
+        },
+        {
+          "dmxRange": [212, 215],
+          "type": "Effect",
+          "effectName": "Flowing water 43"
+        },
+        {
+          "dmxRange": [216, 219],
+          "type": "Effect",
+          "effectName": "Flowing water 44"
+        },
+        {
+          "dmxRange": [220, 223],
+          "type": "Effect",
+          "effectName": "Flowing water 45"
+        },
+        {
+          "dmxRange": [224, 227],
+          "type": "Effect",
+          "effectName": "Flowing water 46"
+        },
+        {
+          "dmxRange": [228, 231],
+          "type": "Effect",
+          "effectName": "Flowing water 47"
+        },
+        {
+          "dmxRange": [232, 235],
+          "type": "Effect",
+          "effectName": "Flowing water 48"
+        },
+        {
+          "dmxRange": [236, 239],
+          "type": "Effect",
+          "effectName": "Flowing water 49"
+        },
+        {
+          "dmxRange": [240, 255],
+          "type": "Effect",
+          "effectName": "Gradient"
+        }
+      ]
+    },
+    "Color Speed": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 3],
+          "type": "EffectSpeed",
+          "speed": "stop",
+          "comment": "Colour effects stand still"
+        },
+        {
+          "dmxRange": [4, 127],
+          "type": "EffectSpeed",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Colour effects forwards"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "EffectSpeed",
+          "speedStart": "slow reverse",
+          "speedEnd": "fast reverse",
+          "comment": "Colour effects backwards"
+        }
+      ]
+    },
+    "Scan Speed": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 63],
+          "type": "Effect",
+          "effectName": "Brightening line scan",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "helpWanted": "Does the speed rise across each range?"
+        },
+        {
+          "dmxRange": [64, 127],
+          "type": "Effect",
+          "effectName": "Line scan",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "Effect",
+          "effectName": "Dot scan",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Strobe": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "ShutterStrobe",
+          "shutterEffect": "Open",
+          "comment": "No strobe"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "ShutterStrobe",
+          "shutterEffect": "Strobe",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "helpWanted": "Slow to fast, or fast to slow?"
+        }
+      ]
+    },
+    "Rotation Z": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Rotation",
+          "angleStart": "0deg",
+          "angleEnd": "360deg",
+          "comment": "Static angle, one full turn"
+        },
+        {
+          "dmxRange": [128, 191],
+          "type": "Rotation",
+          "speedStart": "slow CW",
+          "speedEnd": "fast CW",
+          "comment": "Spin clockwise"
+        },
+        {
+          "dmxRange": [192, 255],
+          "type": "Rotation",
+          "speedStart": "slow CCW",
+          "speedEnd": "fast CCW",
+          "comment": "Spin anticlockwise"
+        }
+      ]
+    },
+    "Rotation X": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Rotation",
+          "angleStart": "0deg",
+          "angleEnd": "360deg",
+          "comment": "Static angle, one full turn",
+          "helpWanted": "Checked on Rotation Z; assumed the same here."
+        },
+        {
+          "dmxRange": [128, 191],
+          "type": "Rotation",
+          "speedStart": "slow CW",
+          "speedEnd": "fast CW",
+          "comment": "Spin clockwise"
+        },
+        {
+          "dmxRange": [192, 255],
+          "type": "Rotation",
+          "speedStart": "slow CCW",
+          "speedEnd": "fast CCW",
+          "comment": "Spin anticlockwise"
+        }
+      ]
+    },
+    "Rotation Y": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Rotation",
+          "angleStart": "0deg",
+          "angleEnd": "360deg",
+          "comment": "Static angle, one full turn",
+          "helpWanted": "Checked on Rotation Z; assumed the same here."
+        },
+        {
+          "dmxRange": [128, 191],
+          "type": "Rotation",
+          "speedStart": "slow CW",
+          "speedEnd": "fast CW",
+          "comment": "Spin clockwise"
+        },
+        {
+          "dmxRange": [192, 255],
+          "type": "Rotation",
+          "speedStart": "slow CCW",
+          "speedEnd": "fast CCW",
+          "comment": "Spin anticlockwise"
+        }
+      ]
+    },
+    "Horizontal Movement": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "BeamPosition",
+          "horizontalAngle": "center",
+          "comment": "No movement"
+        },
+        {
+          "dmxRange": [1, 127],
+          "type": "BeamPosition",
+          "horizontalAngleStart": "left",
+          "horizontalAngleEnd": "right",
+          "comment": "Static position: inner edge (1, off-screen) … centre (64) … outer edge (127, off-screen); the two outputs are mirrored"
+        },
+        {
+          "dmxRange": [128, 159],
+          "type": "Effect",
+          "effectName": "Horizontal scroll, edge to edge, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [160, 191],
+          "type": "Effect",
+          "effectName": "Horizontal scroll, edge to edge, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [192, 223],
+          "type": "Effect",
+          "effectName": "Horizontal scroll with a gap, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "The pattern disappears fully before coming back"
+        },
+        {
+          "dmxRange": [224, 255],
+          "type": "Effect",
+          "effectName": "Horizontal scroll with a gap, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Vertical Movement": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "BeamPosition",
+          "verticalAngle": "center",
+          "comment": "No movement"
+        },
+        {
+          "dmxRange": [1, 127],
+          "type": "BeamPosition",
+          "verticalAngleStart": "bottom",
+          "verticalAngleEnd": "top",
+          "comment": "Static position: inner edge (1, off-screen) … centre (64) … outer edge (127, off-screen); the two outputs are mirrored",
+          "helpWanted": "Checked on Horizontal Movement; assumed the same here."
+        },
+        {
+          "dmxRange": [128, 159],
+          "type": "Effect",
+          "effectName": "Vertical scroll, edge to edge, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [160, 191],
+          "type": "Effect",
+          "effectName": "Vertical scroll, edge to edge, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [192, 223],
+          "type": "Effect",
+          "effectName": "Vertical scroll with a gap, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "The pattern disappears fully before coming back"
+        },
+        {
+          "dmxRange": [224, 255],
+          "type": "Effect",
+          "effectName": "Vertical scroll with a gap, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Zoom": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Zoom",
+          "angleStart": "wide",
+          "angleEnd": "narrow",
+          "comment": "Static zoom: full size (0) … a dot (127)"
+        },
+        {
+          "dmxRange": [128, 159],
+          "type": "Effect",
+          "effectName": "Zoom in loop",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Shrinks to a dot, then jumps back to full size"
+        },
+        {
+          "dmxRange": [160, 191],
+          "type": "Effect",
+          "effectName": "Zoom out loop",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Grows from a dot, then jumps back"
+        },
+        {
+          "dmxRange": [192, 223],
+          "type": "Effect",
+          "effectName": "Zoom pulse",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Shrinks, then grows back smoothly"
+        },
+        {
+          "dmxRange": [224, 255],
+          "type": "Effect",
+          "effectName": "Zoom pulse 2",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Looks the same as Zoom pulse"
+        }
+      ]
+    },
+    "Gradient Speed": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "EffectSpeed",
+          "speed": "stop",
+          "comment": "No gradient"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "EffectSpeed",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Colour gradient speed"
+        }
+      ]
+    },
+    "Wave": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "EffectSpeed",
+          "speed": "stop",
+          "comment": "No wave"
+        },
+        {
+          "dmxRange": [1, 127],
+          "type": "Effect",
+          "effectName": "X wave",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "Effect",
+          "effectName": "Y wave",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Pattern Group 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 15],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 1",
+          "helpWanted": "The manual lists 1–15; is 0 the same?"
+        },
+        {
+          "dmxRange": [16, 31],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 2"
+        },
+        {
+          "dmxRange": [32, 47],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 3"
+        },
+        {
+          "dmxRange": [48, 63],
+          "type": "Effect",
+          "effectName": "Line patterns, folder 4"
+        },
+        {
+          "dmxRange": [64, 127],
+          "type": "Effect",
+          "effectName": "Animation patterns"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "Generic",
+          "helpWanted": "Not described in the manual (the second pattern has no dynamic effects)"
+        }
+      ]
+    },
+    "Pattern Selection 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "Generic",
+          "comment": "No second pattern: this output stays dark (checked on the laser)"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "Effect",
+          "effectName": "Pattern",
+          "comment": "One pattern per 5 values"
+        }
+      ]
+    },
+    "Pattern Size 2": {
+      "capability": {
+        "type": "Zoom",
+        "angleStart": "wide",
+        "angleEnd": "narrow",
+        "comment": "Pattern size, large to small"
+      }
+    },
+    "Horizontal Position 2": {
+      "defaultValue": 128,
+      "capability": {
+        "type": "BeamPosition",
+        "horizontalAngleStart": "left",
+        "horizontalAngleEnd": "right",
+        "comment": "128 = centre (needed to see the pattern); off-screen positions are blanked"
+      }
+    },
+    "Vertical Position 2": {
+      "defaultValue": 128,
+      "capability": {
+        "type": "BeamPosition",
+        "verticalAngleStart": "bottom",
+        "verticalAngleEnd": "top",
+        "comment": "128 = centre (needed to see the pattern); off-screen positions are blanked"
+      }
+    },
+    "Color 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "ColorPreset",
+          "colors": ["#ffffff"],
+          "comment": "White"
+        },
+        {
+          "dmxRange": [1, 3],
+          "type": "ColorPreset",
+          "comment": "Original colours (the pattern's own)"
+        },
+        {
+          "dmxRange": [4, 7],
+          "type": "ColorPreset",
+          "colors": ["#ffffff"],
+          "comment": "White"
+        },
+        {
+          "dmxRange": [8, 11],
+          "type": "ColorPreset",
+          "colors": ["#ff0000"],
+          "comment": "Red"
+        },
+        {
+          "dmxRange": [12, 15],
+          "type": "ColorPreset",
+          "colors": ["#ffff00"],
+          "comment": "Yellow"
+        },
+        {
+          "dmxRange": [16, 19],
+          "type": "ColorPreset",
+          "colors": ["#00ff00"],
+          "comment": "Green"
+        },
+        {
+          "dmxRange": [20, 23],
+          "type": "ColorPreset",
+          "colors": ["#00ffff"],
+          "comment": "Cyan"
+        },
+        {
+          "dmxRange": [24, 27],
+          "type": "ColorPreset",
+          "colors": ["#0000ff"],
+          "comment": "Blue"
+        },
+        {
+          "dmxRange": [28, 31],
+          "type": "ColorPreset",
+          "colors": ["#ff00ff"],
+          "comment": "Magenta (looks purple)"
+        },
+        {
+          "dmxRange": [32, 35],
+          "type": "Effect",
+          "effectName": "Colourful change",
+          "comment": "Colour effects (32–255) run at the speed set on Color Speed",
+          "helpWanted": "Does it jump between colours or fade?"
+        },
+        {
+          "dmxRange": [36, 39],
+          "type": "Effect",
+          "effectName": "Red, green and blue change"
+        },
+        {
+          "dmxRange": [40, 43],
+          "type": "Effect",
+          "effectName": "Original colourful change"
+        },
+        {
+          "dmxRange": [44, 47],
+          "type": "Effect",
+          "effectName": "Flowing water 1"
+        },
+        {
+          "dmxRange": [48, 51],
+          "type": "Effect",
+          "effectName": "Flowing water 2"
+        },
+        {
+          "dmxRange": [52, 55],
+          "type": "Effect",
+          "effectName": "Flowing water 3"
+        },
+        {
+          "dmxRange": [56, 59],
+          "type": "Effect",
+          "effectName": "Flowing water 4"
+        },
+        {
+          "dmxRange": [60, 63],
+          "type": "Effect",
+          "effectName": "Flowing water 5"
+        },
+        {
+          "dmxRange": [64, 67],
+          "type": "Effect",
+          "effectName": "Flowing water 6"
+        },
+        {
+          "dmxRange": [68, 71],
+          "type": "Effect",
+          "effectName": "Flowing water 7"
+        },
+        {
+          "dmxRange": [72, 75],
+          "type": "Effect",
+          "effectName": "Flowing water 8"
+        },
+        {
+          "dmxRange": [76, 79],
+          "type": "Effect",
+          "effectName": "Flowing water 9"
+        },
+        {
+          "dmxRange": [80, 83],
+          "type": "Effect",
+          "effectName": "Flowing water 10"
+        },
+        {
+          "dmxRange": [84, 87],
+          "type": "Effect",
+          "effectName": "Flowing water 11"
+        },
+        {
+          "dmxRange": [88, 91],
+          "type": "Effect",
+          "effectName": "Flowing water 12"
+        },
+        {
+          "dmxRange": [92, 95],
+          "type": "Effect",
+          "effectName": "Flowing water 13"
+        },
+        {
+          "dmxRange": [96, 99],
+          "type": "Effect",
+          "effectName": "Flowing water 14"
+        },
+        {
+          "dmxRange": [100, 103],
+          "type": "Effect",
+          "effectName": "Flowing water 15"
+        },
+        {
+          "dmxRange": [104, 107],
+          "type": "Effect",
+          "effectName": "Flowing water 16"
+        },
+        {
+          "dmxRange": [108, 111],
+          "type": "Effect",
+          "effectName": "Flowing water 17"
+        },
+        {
+          "dmxRange": [112, 115],
+          "type": "Effect",
+          "effectName": "Flowing water 18"
+        },
+        {
+          "dmxRange": [116, 119],
+          "type": "Effect",
+          "effectName": "Flowing water 19"
+        },
+        {
+          "dmxRange": [120, 123],
+          "type": "Effect",
+          "effectName": "Flowing water 20"
+        },
+        {
+          "dmxRange": [124, 127],
+          "type": "Effect",
+          "effectName": "Flowing water 21"
+        },
+        {
+          "dmxRange": [128, 131],
+          "type": "Effect",
+          "effectName": "Flowing water 22"
+        },
+        {
+          "dmxRange": [132, 135],
+          "type": "Effect",
+          "effectName": "Flowing water 23"
+        },
+        {
+          "dmxRange": [136, 139],
+          "type": "Effect",
+          "effectName": "Flowing water 24"
+        },
+        {
+          "dmxRange": [140, 143],
+          "type": "Effect",
+          "effectName": "Flowing water 25"
+        },
+        {
+          "dmxRange": [144, 147],
+          "type": "Effect",
+          "effectName": "Flowing water 26"
+        },
+        {
+          "dmxRange": [148, 151],
+          "type": "Effect",
+          "effectName": "Flowing water 27"
+        },
+        {
+          "dmxRange": [152, 155],
+          "type": "Effect",
+          "effectName": "Flowing water 28"
+        },
+        {
+          "dmxRange": [156, 159],
+          "type": "Effect",
+          "effectName": "Flowing water 29"
+        },
+        {
+          "dmxRange": [160, 163],
+          "type": "Effect",
+          "effectName": "Flowing water 30"
+        },
+        {
+          "dmxRange": [164, 167],
+          "type": "Effect",
+          "effectName": "Flowing water 31"
+        },
+        {
+          "dmxRange": [168, 171],
+          "type": "Effect",
+          "effectName": "Flowing water 32"
+        },
+        {
+          "dmxRange": [172, 175],
+          "type": "Effect",
+          "effectName": "Flowing water 33"
+        },
+        {
+          "dmxRange": [176, 179],
+          "type": "Effect",
+          "effectName": "Flowing water 34"
+        },
+        {
+          "dmxRange": [180, 183],
+          "type": "Effect",
+          "effectName": "Flowing water 35"
+        },
+        {
+          "dmxRange": [184, 187],
+          "type": "Effect",
+          "effectName": "Flowing water 36"
+        },
+        {
+          "dmxRange": [188, 191],
+          "type": "Effect",
+          "effectName": "Flowing water 37"
+        },
+        {
+          "dmxRange": [192, 195],
+          "type": "Effect",
+          "effectName": "Flowing water 38"
+        },
+        {
+          "dmxRange": [196, 199],
+          "type": "Effect",
+          "effectName": "Flowing water 39"
+        },
+        {
+          "dmxRange": [200, 203],
+          "type": "Effect",
+          "effectName": "Flowing water 40"
+        },
+        {
+          "dmxRange": [204, 207],
+          "type": "Effect",
+          "effectName": "Flowing water 41"
+        },
+        {
+          "dmxRange": [208, 211],
+          "type": "Effect",
+          "effectName": "Flowing water 42"
+        },
+        {
+          "dmxRange": [212, 215],
+          "type": "Effect",
+          "effectName": "Flowing water 43"
+        },
+        {
+          "dmxRange": [216, 219],
+          "type": "Effect",
+          "effectName": "Flowing water 44"
+        },
+        {
+          "dmxRange": [220, 223],
+          "type": "Effect",
+          "effectName": "Flowing water 45"
+        },
+        {
+          "dmxRange": [224, 227],
+          "type": "Effect",
+          "effectName": "Flowing water 46"
+        },
+        {
+          "dmxRange": [228, 231],
+          "type": "Effect",
+          "effectName": "Flowing water 47"
+        },
+        {
+          "dmxRange": [232, 235],
+          "type": "Effect",
+          "effectName": "Flowing water 48"
+        },
+        {
+          "dmxRange": [236, 239],
+          "type": "Effect",
+          "effectName": "Flowing water 49"
+        },
+        {
+          "dmxRange": [240, 255],
+          "type": "Effect",
+          "effectName": "Gradient"
+        }
+      ]
+    },
+    "Color Speed 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 3],
+          "type": "EffectSpeed",
+          "speed": "stop",
+          "comment": "Colour effects stand still"
+        },
+        {
+          "dmxRange": [4, 127],
+          "type": "EffectSpeed",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Colour effects forwards"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "EffectSpeed",
+          "speedStart": "slow reverse",
+          "speedEnd": "fast reverse",
+          "comment": "Colour effects backwards"
+        }
+      ]
+    },
+    "Scan Speed 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 63],
+          "type": "Effect",
+          "effectName": "Brightening line scan",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "helpWanted": "Does the speed rise across each range?"
+        },
+        {
+          "dmxRange": [64, 127],
+          "type": "Effect",
+          "effectName": "Line scan",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "Effect",
+          "effectName": "Dot scan",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Strobe 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "ShutterStrobe",
+          "shutterEffect": "Open",
+          "comment": "No strobe"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "ShutterStrobe",
+          "shutterEffect": "Strobe",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "helpWanted": "Slow to fast, or fast to slow?"
+        }
+      ]
+    },
+    "Rotation Z 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Rotation",
+          "angleStart": "0deg",
+          "angleEnd": "360deg",
+          "comment": "Static angle, one full turn"
+        },
+        {
+          "dmxRange": [128, 191],
+          "type": "Rotation",
+          "speedStart": "slow CW",
+          "speedEnd": "fast CW",
+          "comment": "Spin clockwise"
+        },
+        {
+          "dmxRange": [192, 255],
+          "type": "Rotation",
+          "speedStart": "slow CCW",
+          "speedEnd": "fast CCW",
+          "comment": "Spin anticlockwise"
+        }
+      ]
+    },
+    "Rotation X 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Rotation",
+          "angleStart": "0deg",
+          "angleEnd": "360deg",
+          "comment": "Static angle, one full turn",
+          "helpWanted": "Checked on Rotation Z; assumed the same here."
+        },
+        {
+          "dmxRange": [128, 191],
+          "type": "Rotation",
+          "speedStart": "slow CW",
+          "speedEnd": "fast CW",
+          "comment": "Spin clockwise"
+        },
+        {
+          "dmxRange": [192, 255],
+          "type": "Rotation",
+          "speedStart": "slow CCW",
+          "speedEnd": "fast CCW",
+          "comment": "Spin anticlockwise"
+        }
+      ]
+    },
+    "Rotation Y 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Rotation",
+          "angleStart": "0deg",
+          "angleEnd": "360deg",
+          "comment": "Static angle, one full turn",
+          "helpWanted": "Checked on Rotation Z; assumed the same here."
+        },
+        {
+          "dmxRange": [128, 191],
+          "type": "Rotation",
+          "speedStart": "slow CW",
+          "speedEnd": "fast CW",
+          "comment": "Spin clockwise"
+        },
+        {
+          "dmxRange": [192, 255],
+          "type": "Rotation",
+          "speedStart": "slow CCW",
+          "speedEnd": "fast CCW",
+          "comment": "Spin anticlockwise"
+        }
+      ]
+    },
+    "Horizontal Movement 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "BeamPosition",
+          "horizontalAngle": "center",
+          "comment": "No movement"
+        },
+        {
+          "dmxRange": [1, 127],
+          "type": "BeamPosition",
+          "horizontalAngleStart": "left",
+          "horizontalAngleEnd": "right",
+          "comment": "Static position: inner edge (1, off-screen) … centre (64) … outer edge (127, off-screen); the two outputs are mirrored"
+        },
+        {
+          "dmxRange": [128, 159],
+          "type": "Effect",
+          "effectName": "Horizontal scroll, edge to edge, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [160, 191],
+          "type": "Effect",
+          "effectName": "Horizontal scroll, edge to edge, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [192, 223],
+          "type": "Effect",
+          "effectName": "Horizontal scroll with a gap, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "The pattern disappears fully before coming back"
+        },
+        {
+          "dmxRange": [224, 255],
+          "type": "Effect",
+          "effectName": "Horizontal scroll with a gap, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Vertical Movement 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "BeamPosition",
+          "verticalAngle": "center",
+          "comment": "No movement"
+        },
+        {
+          "dmxRange": [1, 127],
+          "type": "BeamPosition",
+          "verticalAngleStart": "bottom",
+          "verticalAngleEnd": "top",
+          "comment": "Static position: inner edge (1, off-screen) … centre (64) … outer edge (127, off-screen); the two outputs are mirrored",
+          "helpWanted": "Checked on Horizontal Movement; assumed the same here."
+        },
+        {
+          "dmxRange": [128, 159],
+          "type": "Effect",
+          "effectName": "Vertical scroll, edge to edge, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [160, 191],
+          "type": "Effect",
+          "effectName": "Vertical scroll, edge to edge, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [192, 223],
+          "type": "Effect",
+          "effectName": "Vertical scroll with a gap, inner to outer",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "The pattern disappears fully before coming back"
+        },
+        {
+          "dmxRange": [224, 255],
+          "type": "Effect",
+          "effectName": "Vertical scroll with a gap, outer to inner",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    },
+    "Zoom 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 127],
+          "type": "Zoom",
+          "angleStart": "wide",
+          "angleEnd": "narrow",
+          "comment": "Static zoom: full size (0) … a dot (127)"
+        },
+        {
+          "dmxRange": [128, 159],
+          "type": "Effect",
+          "effectName": "Zoom in loop",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Shrinks to a dot, then jumps back to full size"
+        },
+        {
+          "dmxRange": [160, 191],
+          "type": "Effect",
+          "effectName": "Zoom out loop",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Grows from a dot, then jumps back"
+        },
+        {
+          "dmxRange": [192, 223],
+          "type": "Effect",
+          "effectName": "Zoom pulse",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Shrinks, then grows back smoothly"
+        },
+        {
+          "dmxRange": [224, 255],
+          "type": "Effect",
+          "effectName": "Zoom pulse 2",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Looks the same as Zoom pulse"
+        }
+      ]
+    },
+    "Gradient Speed 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "EffectSpeed",
+          "speed": "stop",
+          "comment": "No gradient"
+        },
+        {
+          "dmxRange": [1, 255],
+          "type": "EffectSpeed",
+          "speedStart": "slow",
+          "speedEnd": "fast",
+          "comment": "Colour gradient speed"
+        }
+      ]
+    },
+    "Wave 2": {
+      "capabilities": [
+        {
+          "dmxRange": [0, 0],
+          "type": "EffectSpeed",
+          "speed": "stop",
+          "comment": "No wave"
+        },
+        {
+          "dmxRange": [1, 127],
+          "type": "Effect",
+          "effectName": "X wave",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        },
+        {
+          "dmxRange": [128, 255],
+          "type": "Effect",
+          "effectName": "Y wave",
+          "speedStart": "slow",
+          "speedEnd": "fast"
+        }
+      ]
+    }
+  },
+  "modes": [
+    {
+      "name": "16-channel",
+      "shortName": "16ch",
+      "channels": [
+        "On/Off",
+        "Auto Speed",
+        "Pattern Group",
+        "Pattern Selection",
+        "Color",
+        "Color Speed",
+        "Scan Speed",
+        "Pattern Size",
+        "Rotation Z",
+        "Rotation X",
+        "Rotation Y",
+        "Horizontal Movement",
+        "Vertical Movement",
+        "Zoom",
+        "Gradient Speed",
+        "Wave"
+      ]
+    },
+    {
+      "name": "36-channel",
+      "shortName": "36ch",
+      "channels": [
+        "On/Off",
+        "Auto Speed",
+        "Pattern Group",
+        "Pattern Selection",
+        "Pattern Size",
+        "Horizontal Position",
+        "Vertical Position",
+        "Color",
+        "Color Speed",
+        "Scan Speed",
+        "Strobe",
+        "Rotation Z",
+        "Rotation X",
+        "Rotation Y",
+        "Horizontal Movement",
+        "Vertical Movement",
+        "Zoom",
+        "Gradient Speed",
+        "Wave",
+        "Pattern Group 2",
+        "Pattern Selection 2",
+        "Pattern Size 2",
+        "Horizontal Position 2",
+        "Vertical Position 2",
+        "Color 2",
+        "Color Speed 2",
+        "Scan Speed 2",
+        "Strobe 2",
+        "Rotation Z 2",
+        "Rotation X 2",
+        "Rotation Y 2",
+        "Horizontal Movement 2",
+        "Vertical Movement 2",
+        "Zoom 2",
+        "Gradient Speed 2",
+        "Wave 2"
+      ]
+    }
+  ]
+}

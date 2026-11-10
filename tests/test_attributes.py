@@ -12,25 +12,29 @@ from pylzr.fixtures.attributes import COLORS
 # ── The core list ────────────────────────────────────────────────────────
 
 def test_core_list_as_agreed():
-    """The attributes reviewed after the manual and the hardware checks, in display order."""
+    """What any laser could do, in display order. Features only one laser has
+    are extras in its binding, never core attributes."""
     assert [a.name for a in CORE_ATTRIBUTES] == [
-        'power', 'pattern', 'size', 'pos_x', 'pos_y', 'color', 'color_effect', 'flow_variant', 'color_speed',
+        'power', 'pattern', 'size', 'pos_x', 'pos_y', 'color', 'color_effect', 'color_speed',
         'draw_style', 'scan_speed', 'strobe', 'rot_x', 'rot_y', 'rot_z', 'spin_x', 'spin_y', 'spin_z',
-        'shift_x', 'shift_y', 'move_x', 'move_y', 'move_style', 'zoom', 'zoom_motion', 'zoom_style',
-        'gradient_speed', 'wave_axis', 'wave_speed', 'blackout']
+        'move_x', 'move_y', 'zoom', 'zoom_motion', 'zoom_style', 'gradient_speed', 'wave_x', 'wave_y',
+        'blackout']
     assert list(CORE) == [a.name for a in CORE_ATTRIBUTES]
 
 
 def test_core_kinds_and_options():
     kinds = {a.name: a.kind for a in CORE_ATTRIBUTES}
     assert [n for n, k in kinds.items() if k == Kind.BIPOLAR] == [
-        'pos_x', 'pos_y', 'color_speed', 'spin_x', 'spin_y', 'spin_z', 'shift_x', 'shift_y', 'move_x', 'move_y']
+        'pos_x', 'pos_y', 'color_speed', 'spin_x', 'spin_y', 'spin_z', 'move_x', 'move_y']
+    assert [n for n, k in kinds.items() if k == Kind.OPTION] == [
+        'power', 'color', 'color_effect', 'draw_style', 'zoom_style']
     assert kinds['pattern'] == Kind.PATTERN and kinds['blackout'] == Kind.EVENT
     assert CORE['color'].options == COLORS == (
         'white', 'red', 'yellow', 'green', 'cyan', 'blue', 'magenta', 'original')
     assert CORE['power'].options == ('off', 'on')
-    assert CORE['zoom_style'].options == ('shrink', 'grow', 'pulse', 'pulse_alt')
-    assert CORE['move_style'].options == ('wrap', 'gap')
+    assert CORE['color_effect'].options == ('none', 'jump', 'fade', 'gradient')
+    assert CORE['draw_style'].options == ('line', 'dots')
+    assert CORE['zoom_style'].options == ('shrink', 'grow', 'pulse')
 
 
 def test_only_power_and_blackout_belong_to_the_whole_fixture():

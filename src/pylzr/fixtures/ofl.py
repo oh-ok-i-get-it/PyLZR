@@ -113,8 +113,9 @@ class Capability:
     start:      int                   # first DMX value (inclusive)
     end:        int                   # last DMX value (inclusive)
     type:       str                   # one of CAPABILITY_TYPES
-    properties: Mapping[str, Any]     # type-specific, as in the file (e.g. {'speedStart': 'slow', …})
-    comment:    str = ''
+    properties:  Mapping[str, Any]    # type-specific, as in the file (e.g. {'speedStart': 'slow', …})
+    comment:     str = ''
+    help_wanted: str = ''             # what the profile's author wasn't sure of (OFL's "helpWanted")
 
     def contains(self, value: int) -> bool:
         return self.start <= value <= self.end
@@ -289,7 +290,7 @@ def _load_capability(reader: ObjectReader, whole_range: bool = False) -> Capabil
         hint = f' (did you mean "{close[0]}"?)' if close else ''
         raise reader.fail(f'unknown capability type "{kind}"{hint}', 'type')
     comment = reader.optional('comment', str, '')
-    reader.optional('helpWanted', str)
+    help_wanted = reader.optional('helpWanted', str, '')
     menu_click = reader.optional('menuClick', str, 'start')
     if menu_click not in ('start', 'center', 'end', 'hidden'):
         raise reader.fail(f'must be start, center, end or hidden, not "{menu_click}"', 'menuClick')
@@ -297,7 +298,7 @@ def _load_capability(reader: ObjectReader, whole_range: bool = False) -> Capabil
     properties = reader.rest()          # the type-specific ones, checked below
     _check_properties(properties, reader)
     reader.finish()
-    return Capability(start, end, kind, MappingProxyType(properties), comment)
+    return Capability(start, end, kind, MappingProxyType(properties), comment, help_wanted)
 
 
 def _dmx_range(value: list, where: str) -> tuple[int, int]:

@@ -15,9 +15,11 @@ A laser with several pattern outputs has its attributes once per layer
 'size@a', so one-layer lasers never deal with layers. A few attributes
 belong to the whole fixture (layered=False), e.g. power.
 
-CORE is what every binding speaks. A binding can add extras for unusual
-features; their names start with 'x_' so they never clash with core names
-added later.
+CORE is what every binding speaks: what *any* laser could do, never how one
+laser happens to pack it into its channels (that's in its profile and
+binding). A feature only one laser has is an extra in that laser's binding,
+named 'x_…' so it never clashes with core names added later; core
+attributes keep the same choices on every laser, so content stays portable.
 """
 
 import difflib
@@ -188,12 +190,12 @@ CORE_ATTRIBUTES: tuple[Attribute, ...] = (
     Attribute('pos_x', _B, 'Horizontal position: −1 one side … 0 centre … +1 the other'),
     Attribute('pos_y', _B, 'Vertical position: −1 down … 0 centre … +1 up'),
     Attribute('color', _O, 'A fixed colour; "original" is the pattern\'s own colours', COLORS),
-    Attribute('color_effect', _O, 'A colour-changing effect instead of a fixed colour',
-              ('none', 'cycle', 'rgb_cycle', 'original_cycle', 'flow', 'gradient')),
-    Attribute('flow_variant', _C, 'Which flowing-colour combination (0 first … 1 last), with color_effect flow'),
+    Attribute('color_effect', _O, 'A colour-changing effect instead of a fixed colour: jump (switches '
+                                  'between colours), fade (blends them), gradient (colours across the pattern)',
+              ('none', 'jump', 'fade', 'gradient')),
     Attribute('color_speed', _B, 'Speed of the colour effect: + forwards, − backwards, 0 still'),
-    Attribute('draw_style', _O, 'How the pattern is drawn', ('bright_line', 'line', 'dots')),
-    Attribute('scan_speed', _C, 'Drawing speed for the draw style: 0 slow … 1 fast'),
+    Attribute('draw_style', _O, 'How the pattern is drawn: as lines or as dots', ('line', 'dots')),
+    Attribute('scan_speed', _C, 'Drawing speed: 0 slow … 1 fast'),
     Attribute('strobe', _C, 'Strobe speed: 0 off … 1 fastest'),
     Attribute('rot_x', _C, 'Static rotation around X: 0 … 1 = one full turn'),
     Attribute('rot_y', _C, 'Static rotation around Y: 0 … 1 = one full turn'),
@@ -201,17 +203,15 @@ CORE_ATTRIBUTES: tuple[Attribute, ...] = (
     Attribute('spin_x', _B, 'Continuous rotation around X: + clockwise, − anticlockwise, 0 none'),
     Attribute('spin_y', _B, 'Continuous rotation around Y: + clockwise, − anticlockwise, 0 none'),
     Attribute('spin_z', _B, 'Continuous rotation around Z: + clockwise, − anticlockwise, 0 none'),
-    Attribute('shift_x', _B, 'Static horizontal shift: −1 inner/left … 0 centre … +1 outer/right'),
-    Attribute('shift_y', _B, 'Static vertical shift: −1 down … 0 centre … +1 up'),
-    Attribute('move_x', _B, 'Continuous horizontal movement: + outwards/right, − inwards/left, 0 none'),
+    Attribute('move_x', _B, 'Continuous horizontal movement: + right, − left, 0 none'),
     Attribute('move_y', _B, 'Continuous vertical movement: + up, − down, 0 none'),
-    Attribute('move_style', _O, 'Movement style: repeating edge to edge, or with a gap', ('wrap', 'gap')),
     Attribute('zoom', _C, 'Static zoom: 1 full size … 0 a dot'),
     Attribute('zoom_motion', _C, 'Speed of the zoom effect: 0 none … 1 fastest'),
-    Attribute('zoom_style', _O, 'Zoom effect', ('shrink', 'grow', 'pulse', 'pulse_alt')),
+    Attribute('zoom_style', _O, 'Zoom effect: shrinking, growing, or pulsing in and out',
+              ('shrink', 'grow', 'pulse')),
     Attribute('gradient_speed', _C, 'Colour gradient speed: 0 off … 1 fastest'),
-    Attribute('wave_axis', _O, 'Direction of the wave effect', ('x', 'y')),
-    Attribute('wave_speed', _C, 'Wave effect speed: 0 off … 1 fastest'),
+    Attribute('wave_x', _C, 'Horizontal wave effect speed: 0 off … 1 fastest'),
+    Attribute('wave_y', _C, 'Vertical wave effect speed: 0 off … 1 fastest'),
     Attribute('blackout', _E, 'Everything dark at once', layered=False),
 )
 

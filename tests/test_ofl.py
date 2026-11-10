@@ -77,6 +77,8 @@ def test_real_profile_proportional_properties(el400):
     speed = el400.channels['Scanning Speed'].capabilities[0]
     assert [parse_entity(v).number for v in speed.span('speed')] == [100, 1]          # fast → slow
     assert speed.span('angle') is None
+    assert speed.help_wanted == 'Are the scanning speed start and end values correct?'
+    assert centre.help_wanted == '' and 'helpWanted' not in sweep.properties       # kept apart from properties
 
 
 def test_properties_are_read_only(el400):
