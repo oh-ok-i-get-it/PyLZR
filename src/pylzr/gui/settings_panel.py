@@ -2,54 +2,39 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QFrame, QSlider, QPushButton, QProgressBar,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from ..analysis import FFTWorker
 from ..core import CONTROL_MODES
-from . import theme
+from . import style, theme
 from .dmx_settings import DMXSettings
-from .panel_style import SMALL_BUTTON_STYLE, label, pad, section
+from .panel_style import ICON_BUTTON_STYLE, SMALL_BUTTON_STYLE, label, pad, section
 
 _W = 560  # panel width — wide enough for 3 columns
 
+# Dropdowns and sliders use the app-wide look (gui/style.py)
 _PANEL_STYLE = (
     'QWidget#SettingsPanel {'
-    '  background: #111111;'
-    '  border: 1px solid #333333;'
+    f'  background: {theme.CARD};'
+    f'  border: 1px solid {theme.BORDER_STRONG};'
     f'  border-top: 2px solid {theme.ACCENT};'
+    f'  border-radius: {theme.RADIUS_CARD}px;'
     '}'
 )
 
-_VALUE_STYLE   = 'color: #c9d1d9; font-size: 10px;'
-_READOUT_STYLE = 'color: #8a8a8a; font-size: 10px;'
-_DIAG_STYLE    = 'color: #c9d1d9; font-size: 11px; font-weight: bold;'
-
-_COMBO_STYLE = (
-    'QComboBox {'
-    '  background: #1a1a1a; color: #c9d1d9;'
-    '  border: 1px solid #2e2e2e; border-radius: 3px;'
-    '  padding: 3px 7px; font-size: 10px;'
-    '}'
-    f'QComboBox:hover {{ border-color: {theme.ACCENT}; }}'
-    'QComboBox::drop-down { border: none; width: 14px; }'
-    'QComboBox QAbstractItemView {'
-    '  background: #1a1a1a; color: #c9d1d9;'
-    '  selection-background-color: #252525; border: 1px solid #333;'
-    '}'
+_VALUE_STYLE   = f'color: {theme.TEXT}; font-size: {theme.SIZE_LABEL}px; background: transparent;'
+_READOUT_STYLE = (
+    f'color: {theme.TEXT_DIM}; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
+    ' background: transparent;'
 )
-
-_SLIDER_STYLE = (
-    'QSlider::groove:horizontal { background: #2a2a2a; height: 4px; border-radius: 2px; }'
-    'QSlider::handle:horizontal {'
-    f'  background: {theme.ACCENT}; width: 10px; height: 10px;'
-    '  margin: -3px 0; border-radius: 5px;'
-    '}'
-    'QSlider::sub-page:horizontal { background: #3a5a8a; border-radius: 2px; }'
+_DIAG_STYLE    = (
+    f'color: {theme.TEXT}; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
+    ' font-weight: bold; background: transparent;'
 )
 
 _LEVEL_STYLE = (
     'QProgressBar {'
-    '  background: #1e1e1e; border: 1px solid #2a2a2a;'
-    '  border-radius: 3px; text-align: center;'
+    f'  background: {theme.RAISED}; border: 1px solid {theme.BORDER_STRONG};'
+    '  border-radius: 4px; text-align: center;'
     '}'
     'QProgressBar::chunk {'
     '  background: qlineargradient(x1:0,y1:0,x2:1,y2:0,'
@@ -68,9 +53,10 @@ _IND_NA      = 'border-radius:5px; background:#383838;'
 # while sending without an answer (some nodes never answer; not an error)
 _DMX_DOTS = {'off': _IND_NA, 'connected': _IND_ON, 'sending': _IND_SENT, 'warning': _IND_WARN,
              'error': _IND_OFF}
-_CLIP_ON     = f'border-radius:3px; background:{theme.ERROR}; font-size:8px; color:#fff; padding:1px 3px;'
-_CLIP_OFF    = 'border-radius:3px; background:#252525; font-size:8px; color:#444; padding:1px 3px;'
-_DIV_STYLE   = 'background:#1e1e1e; border:none;'
+_CLIP_BASE   = f'border-radius:3px; font-family:"{theme.MONO_FONT}"; font-size:8px; font-weight:bold; padding:1px 3px;'
+_CLIP_ON     = _CLIP_BASE + f' background:{theme.ERROR}; color:#fff;'
+_CLIP_OFF    = _CLIP_BASE + f' background:{theme.RAISED}; color:{theme.DISABLED};'
+_DIV_STYLE   = f'background:{theme.DIVIDER}; border:none;'
 
 # (label, value) choices for the fixed dropdowns
 _LOG_LEVELS    = [('Info', 'info'), ('Debug', 'debug'), ('Quiet', 'quiet')]
@@ -295,7 +281,12 @@ class SettingsPanel(QWidget):
         self._device_combo = self._dropdown(self.audio_device_changed, placeholder='No devices found')
         self._rescan_btn = QPushButton('↻')
         self._rescan_btn.setFixedSize(24, 22)
-        self._rescan_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        self._rescan_btn.setStyleSheet(ICON_BUTTON_STYLE)
+        rescan_icon = style.icon('rotate-cw', theme.TEXT_DIM, size=13)
+        if not rescan_icon.isNull():            # otherwise the ↻ glyph stays
+            self._rescan_btn.setIcon(rescan_icon)
+            self._rescan_btn.setIconSize(QSize(13, 13))
+            self._rescan_btn.setText('')
         self._rescan_btn.setToolTip('Rescan audio inputs (briefly pauses audio)')
         self._rescan_btn.clicked.connect(lambda: self.audio_devices_refresh_requested.emit())
         device_row = QHBoxLayout()
@@ -314,7 +305,6 @@ class SettingsPanel(QWidget):
         self._gain_slider = QSlider(Qt.Horizontal)
         self._gain_slider.setRange(25, 400)
         self._gain_slider.setValue(100)
-        self._gain_slider.setStyleSheet(_SLIDER_STYLE)
         self._gain_slider.valueChanged.connect(self._on_gain_changed)
         v.addLayout(_labeled_control('Input Gain', self._gain_readout, self._gain_slider))
 
@@ -338,7 +328,6 @@ class SettingsPanel(QWidget):
         self._smooth_slider = QSlider(Qt.Horizontal)
         self._smooth_slider.setRange(0, 90)
         self._smooth_slider.setValue(0)
-        self._smooth_slider.setStyleSheet(_SLIDER_STYLE)
         self._smooth_slider.valueChanged.connect(self._on_smooth_changed)
         v.addLayout(_labeled_control('Smoothing', self._smooth_readout, self._smooth_slider))
 
@@ -416,7 +405,6 @@ class SettingsPanel(QWidget):
         """Styled combo of (label, value) items that emits signal(value) when
         the user picks an item."""
         combo = QComboBox()
-        combo.setStyleSheet(_COMBO_STYLE)
         combo.setPlaceholderText(placeholder)
         _fill_combo(combo, list(items), fallback_row=0)
 

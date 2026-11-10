@@ -5,27 +5,32 @@ from PyQt5.QtWidgets import QLabel, QWidget
 
 from . import theme
 
-SECTION_STYLE = f'color: {theme.ACCENT}; font-size: 9px; font-weight: bold; letter-spacing: 0.08em;'
-LABEL_STYLE   = 'color: #666666; font-size: 10px;'
+SECTION_STYLE = (
+    f'color: {theme.ACCENT}; font-size: {theme.SIZE_SECTION}px; font-weight: 600; background: transparent;'
+)
+LABEL_STYLE   = f'color: {theme.TEXT_DIM}; font-size: {theme.SIZE_LABEL}px; background: transparent;'
 
 INPUT_STYLE = (
     'QLineEdit, QSpinBox {'
-    '  background: #1a1a1a; color: #c9d1d9;'
-    '  border: 1px solid #2e2e2e; border-radius: 3px;'
-    '  padding: 2px 5px; font-size: 10px;'
+    f'  background: {theme.RAISED}; color: {theme.TEXT};'
+    f'  border: 1px solid {theme.BORDER_STRONG}; border-radius: {theme.RADIUS}px;'
+    f'  padding: 2px 5px; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
     '}'
     f'QLineEdit:hover, QSpinBox:hover, QLineEdit:focus, QSpinBox:focus {{ border-color: {theme.ACCENT}; }}'
 )
 
-SMALL_BUTTON_STYLE = (
-    'QPushButton {'
-    '  background:#1e1e1e; color:#666; font-size:10px;'
-    '  border:1px solid #2e2e2e; border-radius:3px; padding:3px 10px;'
-    '}'
-    f'QPushButton:checked {{ background:#0f3d1a; color:{theme.OK}; border-color:{theme.OK}; }}'
-    f'QPushButton:hover   {{ border-color:{theme.ACCENT}; }}'
-    'QPushButton:disabled { color:#3a3a3a; border-color:#222222; }'
+_SMALL_BUTTON_BASE = (
+    'QPushButton {{'
+    f'  background: {theme.BUTTON}; color: {theme.TEXT}; font-size: {theme.SIZE_LABEL}px;'
+    f'  border: 1px solid {theme.BORDER_STRONG}; border-radius: {theme.RADIUS}px; padding: {{padding}};'
+    '}}'
+    f'QPushButton:hover    {{{{ border-color: {theme.ACCENT}; }}}}'
+    f'QPushButton:pressed  {{{{ background: {theme.RAISED}; }}}}'
+    f'QPushButton:checked  {{{{ background: {theme.OK_TINT}; color: {theme.OK}; border-color: {theme.OK}; }}}}'
+    f'QPushButton:disabled {{{{ background: {theme.CARD}; color: {theme.DISABLED}; border-color: {theme.BORDER}; }}}}'
 )
+SMALL_BUTTON_STYLE = _SMALL_BUTTON_BASE.format(padding='3px 10px')
+ICON_BUTTON_STYLE  = _SMALL_BUTTON_BASE.format(padding='0')   # small square buttons showing just an icon
 
 
 def label(text: str, style: str = LABEL_STYLE) -> QLabel:

@@ -80,6 +80,12 @@ def test_icons_draw_in_theme_colours(qapp):
     assert not style.status_dot_icon(theme.DISABLED, theme.OK).isNull()
 
 
+def test_dropdown_arrow_matches_the_theme():
+    """Stylesheet images can't be recoloured, so the arrow's colour is in the file."""
+    assert f'stroke="{theme.TEXT_DIM}"' in style.COMBO_ARROW.read_text(encoding='utf-8')
+    assert style.COMBO_ARROW.as_posix() in style.stylesheet()
+
+
 def test_every_icon_set_ships_with_its_licence():
     assert list(style.ICONS.glob('*.svg'))
     assert (style.ICONS / 'Lucide-LICENSE.txt').is_file()

@@ -19,6 +19,7 @@ from . import theme
 ASSETS = Path(__file__).parent / 'assets'
 FONTS  = ASSETS / 'fonts'
 ICONS  = ASSETS / 'icons'
+COMBO_ARROW = ICONS / 'combo-arrow.svg'   # drawn in theme.TEXT_DIM (stylesheet images can't be recoloured)
 
 
 def rgba(hex_color: str, alpha: float) -> str:
@@ -205,6 +206,11 @@ QLineEdit, QSpinBox {{ font-family: "{t.MONO_FONT}"; }}
 QLineEdit:hover, QSpinBox:hover, QComboBox:hover,
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{ border-color: {t.ACCENT}; }}
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled {{ color: {t.DISABLED}; border-color: {t.BORDER}; }}
+QComboBox {{ padding: 3px 22px 3px 8px; }}
+QComboBox::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: center right; width: 20px; border: none;
+}}
+QComboBox::down-arrow {{ image: url("{COMBO_ARROW.as_posix()}"); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{
     background: {t.RAISED}; color: {t.TEXT}; border: 1px solid {t.BORDER_STRONG};
     selection-background-color: {tint}; selection-color: {t.TEXT}; outline: 0; padding: 4px;

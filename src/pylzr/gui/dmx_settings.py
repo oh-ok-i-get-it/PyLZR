@@ -3,12 +3,12 @@ from collections.abc import Sequence
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QSpinBox, QAbstractSpinBox, QMenu,
 )
-from PyQt5.QtCore import QPoint, QRegularExpression, pyqtSignal
+from PyQt5.QtCore import QPoint, QRegularExpression, QSize, pyqtSignal
 from PyQt5.QtGui import QRegularExpressionValidator
 
 from ..core import DMX_DEFAULT_NODE_IP
 from ..dmx import NodeChoice, is_ipv4
-from . import theme
+from . import style, theme
 from .panel_style import INPUT_STYLE, SMALL_BUTTON_STYLE, label, pad, section
 
 # Accepts what can still become an IPv4 address while typing; is_ipv4()
@@ -21,12 +21,7 @@ _FIND_TIP       = ('Look for Art-Net nodes on the network (takes 2 seconds), the
                    'its IP address and universe.')
 _NONE_FOUND     = 'No Art-Net nodes answered (see the log)'
 
-_MENU_STYLE = (
-    'QMenu { background: #1a1a1a; color: #c9d1d9; border: 1px solid #333; font-size: 10px; }'
-    'QMenu::item { padding: 4px 12px; }'
-    f'QMenu::item:selected {{ background: #252525; color: {theme.ACCENT}; }}'
-    'QMenu::item:disabled { color: #555555; }'
-)
+# The Find results menu uses the app-wide menu look (gui/style.py)
 
 
 class DMXSettings(QWidget):
@@ -81,6 +76,8 @@ class DMXSettings(QWidget):
         self._find_btn = QPushButton('Find')
         self._find_btn.setFixedHeight(22)
         self._find_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        self._find_btn.setIcon(style.icon('search', theme.TEXT_DIM, size=12))   # beside the text
+        self._find_btn.setIconSize(QSize(12, 12))
         self._find_btn.setToolTip(_FIND_TIP)
         self._find_btn.clicked.connect(lambda: self.find_requested.emit())
         row.addWidget(self._find_btn)
@@ -143,7 +140,6 @@ class DMXSettings(QWidget):
             self._nodes_menu.close()
             self._nodes_menu.deleteLater()
         menu = QMenu(self)
-        menu.setStyleSheet(_MENU_STYLE)
         menu.setToolTipsVisible(True)
         for choice in choices:
             action = menu.addAction(choice.label)
