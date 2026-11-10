@@ -48,10 +48,12 @@ extra-build-variables = { pyaudio = { CFLAGS = "-I/opt/homebrew/include -I/usr/l
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# Shipped fixture files (profiles, bindings). CI's package job checks every
-# one of them ends up in the built packages.
+# Shipped fixture files (profiles, bindings) and GUI assets (fonts and their
+# licences). CI's package job checks every one of them ends up in the built
+# packages.
 [tool.setuptools.package-data]
 "pylzr.fixtures" = ["data/**/*.json"]
+"pylzr.gui" = ["assets/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
