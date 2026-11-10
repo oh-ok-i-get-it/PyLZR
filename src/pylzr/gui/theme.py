@@ -22,7 +22,11 @@ TEXT          = '#e6e8eb'   # values, button text
 TEXT_DIM      = '#9aa0a6'   # labels
 TEXT_MUTED    = '#5f6368'   # hints, status line
 DISABLED      = '#444444'   # disabled text
-AXIS          = '#7d838b'   # plot axes and tick labels
+AXIS          = '#7d838b'   # plot tick labels
+AXIS_LINE     = '#3a3a3a'   # plot axis lines
+GRID          = '#5a5a5a'   # plot grid pen (pyqtgraph's GridItem draws it much fainter)
+MID_BAND      = '#6e7681'   # spectrum between the low and high bands
+TOP_BAND      = '#3a3a3a'   # spectrum above the high band (shown, not analysed)
 
 # Fonts (bundled in gui/assets/fonts) and pixel sizes
 UI_FONT   = 'Inter'

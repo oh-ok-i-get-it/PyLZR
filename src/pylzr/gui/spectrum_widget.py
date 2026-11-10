@@ -1,17 +1,26 @@
 import numpy as np
 import pyqtgraph as pg
+from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
+from . import theme
 from ..analysis import BandLayout
+
+# Spectrum lines: low, mid, high, top (not analysed). Lines stay 1 px wide:
+# wider antialiased lines are far slower to draw.
+_BAND_COLOURS = (theme.LOW_BAND, theme.MID_BAND, theme.HIGH_BAND, theme.TOP_BAND)
+_FILLED       = (theme.LOW_BAND, theme.HIGH_BAND)   # the analysed bands get a soft fill
+_FILL_ALPHA   = 0.10                                 # 0 turns the fill off
 
 
 class SpectrumWidget(QWidget):
     """Waveform and log-log spectrum plots.
 
     The spectrum is drawn against each FFT bin's true frequency, coloured by
-    band (low yellow, mid blue, high magenta); the 11–22 kHz range, which is
-    not analysed, is grey. set_smoothing() applies an exponential moving
-    average to the displayed spectrum only; the analysis always uses raw data.
+    band (low gold, mid grey, high purple, as elsewhere in the app); the
+    11–22 kHz range, which is not analysed, is dim grey. set_smoothing()
+    applies an exponential moving average to the displayed spectrum only;
+    the analysis always uses raw data.
     """
 
     def __init__(self, bands: BandLayout):
@@ -24,6 +33,7 @@ class SpectrumWidget(QWidget):
 
         pg.setConfigOptions(antialias=True)
         self._gfx = pg.GraphicsLayoutWidget()
+        self._gfx.setBackground(theme.BG)
         self._build_plots()
 
         layout = QVBoxLayout()
@@ -50,14 +60,42 @@ class SpectrumWidget(QWidget):
         self.spectrum.setYRange(-4, 0, padding=0)
         self.spectrum.setXRange(np.log10(20), np.log10(rate / 2), padding=0.005)
 
-        for plot in (self.waveform, self.spectrum):
+        # Grid steps: waveform every half chunk and 50 levels; spectrum every decade
+        # (its view is in log10 units)
+        for plot, title, grid_x, grid_y in ((self.waveform, 'WAVEFORM', chunk // 2, 50),
+                                            (self.spectrum, 'SPECTRUM', 1, 1)):
             plot.getViewBox().keyPressEvent = lambda ev: ev.ignore()
+            self._style_plot(plot, title, grid_x, grid_y)
 
-        self._waveform_line = self.waveform.plot(pen='c')
-        # low, mid, high, top (not analysed)
-        self._spectrum_lines = [self.spectrum.plot(pen=pen) for pen in ('y', 'b', 'm', '#555')]
+        self._waveform_line = self.waveform.plot(pen=pg.mkPen(theme.ACCENT, width=1))
+        # low, mid, high, top (not analysed); the spectrum's y range starts at log10 = -4
+        self._spectrum_lines = []
+        for colour in _BAND_COLOURS:
+            fill = None
+            if colour in _FILLED and _FILL_ALPHA > 0:
+                fill = QColor(colour)
+                fill.setAlphaF(_FILL_ALPHA)
+            self._spectrum_lines.append(self.spectrum.plot(
+                pen=pg.mkPen(colour, width=1), fillLevel=-4 if fill else None, brush=fill))
         # The log x-axis can't show 0 Hz, so bin 0 (DC) is not drawn
         self._spectrum_x = self._drawn(self._bands.split(self._bands.freqs))
+
+    @staticmethod
+    def _style_plot(plot, title: str, grid_x: float, grid_y: float):
+        """Dim title, axis text in the UI font, and a faint grid. The grid is a
+        separate item: the axes' own grid hides the edge tick labels (0, 1)."""
+        plot.setTitle(title, color=theme.TEXT_DIM, size='8pt', bold=True)
+        font = QFont(theme.UI_FONT)
+        font.setPixelSize(theme.SIZE_LABEL)
+        for name in ('left', 'bottom'):
+            axis = plot.getAxis(name)
+            axis.setPen(pg.mkPen(theme.AXIS_LINE))
+            axis.setTextPen(pg.mkPen(theme.AXIS))
+            axis.setStyle(tickFont=font)
+        grid = pg.GridItem(pen=pg.mkPen(theme.GRID), textPen=None)
+        grid.setTickSpacing(x=[grid_x], y=[grid_y])
+        grid.setZValue(-100)                 # behind the lines
+        plot.addItem(grid, ignoreBounds=True)
 
     def set_smoothing(self, value: float):
         """EMA factor 0.0 (off) – 0.9 (heavy)."""
