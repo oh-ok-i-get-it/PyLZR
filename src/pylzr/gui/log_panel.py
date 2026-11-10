@@ -1,13 +1,22 @@
 import logging
 from collections import deque
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import Qt, QObject, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextBlockFormat, QTextCursor
 from . import theme
 from ..core.app_logger import DATE_FORMAT, LEVELS, LOG_FORMAT, tone_of
 
-_BG_STYLE = 'QTextEdit {{ background-color: #1a1a1a; color: {fg}; border: 1px solid #333; }}'
-_DEFAULT_FG = '#d4d4d4'
+# Each panel is a card (title + text); the text box itself is borderless on it
+_CARD_OBJECT = 'LogCard'
+_CARD_STYLE  = (
+    f'#{_CARD_OBJECT} {{ background: {theme.CARD}; border: 1px solid {theme.BORDER};'
+    f' border-radius: {theme.RADIUS_CARD}px; }}'
+)
+_TITLE_STYLE = (
+    f'color: {theme.TEXT_DIM}; font-size: {theme.SIZE_SECTION}px; font-weight: 600; background: transparent;'
+)
+_TEXT_STYLE  = 'QTextEdit {{ background: transparent; color: {fg}; border: none; }}'
+_DEFAULT_FG  = theme.TEXT
 
 _MAX_LOG_LINES = 2000   # oldest console lines are dropped beyond this
 _AVG_ROWS      = 10
@@ -42,9 +51,25 @@ def _base_text_widget(height: int) -> QTextEdit:
     t.setReadOnly(True)
     t.setFixedHeight(height)
     t.setLineWrapMode(QTextEdit.NoWrap)
+    t.setStyleSheet(_TEXT_STYLE.format(fg=_DEFAULT_FG))
     doc = t.document()
     doc.setDocumentMargin(2)
     return t
+
+
+def _card(panel: QWidget, title: str, text: QTextEdit) -> None:
+    """Lay out `panel` as a card: small-caps title above its text box."""
+    panel.setObjectName(_CARD_OBJECT)
+    panel.setAttribute(Qt.WA_StyledBackground, True)
+    panel.setStyleSheet(_CARD_STYLE)
+    heading = QLabel(title)
+    heading.setStyleSheet(_TITLE_STYLE)
+    layout = QVBoxLayout()
+    layout.setContentsMargins(10, 9, 6, 6)
+    layout.setSpacing(5)
+    layout.addWidget(heading)
+    layout.addWidget(text)
+    panel.setLayout(layout)
 
 
 class LogPanel(QWidget):
@@ -56,15 +81,9 @@ class LogPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout()
-        layout.setContentsMargins(4, 2, 4, 4)
-        layout.setSpacing(2)
-        layout.addWidget(QLabel('Console'))
         self._text = _base_text_widget(130)
-        self._text.setStyleSheet(_BG_STYLE.format(fg=_DEFAULT_FG))
         self._text.document().setMaximumBlockCount(_MAX_LOG_LINES)
-        layout.addWidget(self._text)
-        self.setLayout(layout)
+        _card(self, 'CONSOLE', self._text)
 
         self.log_handler = _LogHandler()
         self.log_handler.bridge.formatted.connect(self.append_message)
@@ -98,14 +117,8 @@ class AvgPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._entries: deque[tuple[float, float]] = deque(maxlen=_AVG_ROWS)
-        layout = QVBoxLayout()
-        layout.setContentsMargins(4, 2, 4, 4)
-        layout.setSpacing(2)
-        layout.addWidget(QLabel('Averages'))
         self._text = _base_text_widget(130)
-        self._text.setStyleSheet(_BG_STYLE.format(fg=_DEFAULT_FG))
-        layout.addWidget(self._text)
-        self.setLayout(layout)
+        _card(self, 'AVERAGES', self._text)
 
     def append_avgs(self, low_avg: float, high_avg: float):
         self._entries.append((low_avg, high_avg))
@@ -116,8 +129,6 @@ class AvgPanel(QWidget):
             f'<span style="color:{theme.HIGH_BAND}">H {hi:>9.4f}</span>'
             for lo, hi in self._entries
         ]
-        self._text.setHtml(
-            f'<div style="background:#1a1a1a; margin:0; padding:0;">{"<br>".join(lines)}</div>'
-        )
+        self._text.setHtml(f'<div style="margin:0; padding:0;">{"<br>".join(lines)}</div>')
         sb = self._text.verticalScrollBar()
         sb.setValue(sb.maximum())
