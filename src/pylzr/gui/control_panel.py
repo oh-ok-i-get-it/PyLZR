@@ -4,22 +4,46 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QLabel, QSlider, QPushButton,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QSignalBlocker
-from . import theme
+from PyQt5.QtCore import Qt, pyqtSignal, QSignalBlocker, QSize
+from . import style, theme
 from ..core import (
     CUTOFF_SLIDER_MAX,
     AVG_COUNT_RATE_DEFAULT, AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX,
     DEFAULT_LOW_THRESHOLDS, DEFAULT_HIGH_THRESHOLDS,
 )
 
-_MODE_DISPLAY_STYLE = (
-    'QLabel {{ background-color: #111; color: {color}; border: 1px solid #444;'
-    ' font-weight: bold; font-size: 13px; padding: 2px 6px; }}'
+_TILE_BORDER = '#222222'
+
+# Indicator tiles: two lines of mono text ('LOW\n2'), band colour on LOW / HIGH
+_DISPLAY_STYLE = (
+    'QLabel {{ background: ' + theme.CARD + '; color: {color};'
+    ' border: 1px solid {border}; border-radius: ' + str(theme.RADIUS_CARD) + 'px;'
+    ' font-family: "' + theme.MONO_FONT + '"; font-size: {size}px; font-weight: bold; }}'
 )
-_SMALL_DISPLAY_STYLE = (
-    'QLabel {{ background-color: #0d0d0d; color: {color}; border: 1px solid #333;'
-    ' font-size: 10px; padding: 1px 4px; }}'
+
+# Sound Mode: a dark tile when off; green tint, border and lit dot (its icon) when on
+_SM_STYLE = (
+    f'QPushButton {{ background: {theme.CARD}; color: {theme.TEXT_DIM};'
+    f' border: 1px solid #262626; border-radius: {theme.RADIUS_CARD}px;'
+    f' font-size: {theme.SIZE_TITLE}px; font-weight: 600; padding: 0 12px; }}'
+    'QPushButton:hover { border-color: #3a3a3a; }'
+    f'QPushButton:checked {{ background: {style.mix(theme.OK, theme.BG, 0.09)};'
+    f' color: {style.mix(theme.OK, "#ffffff", 0.5)}; border-color: {style.mix(theme.OK, theme.BG, 0.55)}; }}'
+    f'QPushButton:checked:hover {{ border-color: {theme.OK}; }}'
 )
+
+# Gear: icon only; outlined on hover, accent while the settings panel is open
+_GEAR_STYLE = (
+    'QPushButton { background: transparent; border: 1px solid transparent;'
+    f' border-radius: {theme.RADIUS}px; padding: 0; color: {theme.TEXT_DIM}; font-size: 17px; }}'
+    f'QPushButton:hover {{ background: {theme.BUTTON}; border-color: {theme.BORDER_STRONG}; }}'
+    f'QPushButton:checked {{ background: {style.mix(theme.ACCENT, theme.BG, 0.14)};'
+    f' border-color: {theme.ACCENT}; color: {theme.ACCENT}; }}'
+)
+
+_LABEL_STYLE  = f'color: {theme.TEXT_DIM}; font-size: {theme.SIZE_LABEL}px; font-weight: normal;'
+_STATUS_STYLE = f'color: {theme.TEXT_MUTED}; font-size: {theme.SIZE_LABEL}px;'
+_VALUE_STYLE  = f'color: {theme.TEXT}; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_BODY}px; font-weight: bold;'
 
 
 class ControlPanel(QWidget):
@@ -52,13 +76,13 @@ class ControlPanel(QWidget):
         top_row.setSpacing(8)
 
         # Avg-rate slider (compact fixed width)
-        rate_group = QGroupBox('Avgs Calc Rate')
+        rate_group = QGroupBox('AVGS CALC RATE')
         rate_group.setMaximumWidth(200)
-        rate_layout = QVBoxLayout()
-        rate_layout.setContentsMargins(4, 2, 4, 2)
-        rate_layout.setSpacing(1)
+        rate_layout = QHBoxLayout()           # value beside the slider
+        rate_layout.setContentsMargins(2, 0, 2, 0)
+        rate_layout.setSpacing(8)
         self._count_label = QLabel(str(AVG_COUNT_RATE_DEFAULT))
-        self._count_label.setStyleSheet('font-weight: bold;')
+        self._count_label.setStyleSheet(_VALUE_STYLE)
         self._count_slider = QSlider(Qt.Horizontal)
         self._count_slider.setRange(AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX)
         self._count_slider.setValue(AVG_COUNT_RATE_DEFAULT)
@@ -74,15 +98,14 @@ class ControlPanel(QWidget):
         self._sm_button.setCheckable(True)
         self._sm_button.setFixedHeight(52)
         self._sm_button.setMinimumWidth(160)
-        self._sm_button.setStyleSheet(
-            'QPushButton { background-color: #8b0000; color: white; font-weight: bold; font-size: 14px; border-radius: 4px; }'
-            'QPushButton:checked { background-color: #006400; color: white; }'
-        )
+        self._sm_button.setStyleSheet(_SM_STYLE)
+        self._sm_button.setIcon(style.status_dot_icon(theme.DISABLED, theme.OK))
+        self._sm_button.setIconSize(QSize(16, 16))
         self._sm_button.clicked.connect(lambda: self.sound_mode_toggled.emit())
 
         # Dual mode + count displays (small, muted — right of button)
-        self._dm_display       = self._make_small_display('DM', '—', '#666')
-        self._dm_count_display = self._make_small_display('CNT', '—', '#555')
+        self._dm_display       = self._make_small_display('DM', '—', theme.TEXT_DIM)
+        self._dm_count_display = self._make_small_display('CNT', '—', theme.TEXT_DIM)
 
         # Current sound mode index displays (LOW / HIGH)
         self._low_mode_display  = self._make_mode_display('LOW',  '—', theme.LOW_BAND)
@@ -101,14 +124,12 @@ class ControlPanel(QWidget):
         self.gear_button.setFixedSize(30, 30)
         self.gear_button.setCheckable(True)
         self.gear_button.setToolTip('Settings')
-        self.gear_button.setStyleSheet(
-            'QPushButton {'
-            '  background: transparent; color: #555; font-size: 17px;'
-            '  border: none; border-radius: 4px;'
-            '}'
-            'QPushButton:hover { color: #c9d1d9; background: #1e1e1e; }'
-            f'QPushButton:checked {{ color: {theme.ACCENT}; background: #1a1a1a; }}'
-        )
+        self.gear_button.setStyleSheet(_GEAR_STYLE)
+        gear_icon = style.icon('settings', theme.TEXT_DIM, on_color=theme.ACCENT)
+        if not gear_icon.isNull():              # otherwise the ⚙ glyph stays
+            self.gear_button.setIcon(gear_icon)
+            self.gear_button.setIconSize(QSize(16, 16))
+            self.gear_button.setText('')
         self.gear_button.clicked.connect(lambda: self.settings_toggled.emit())
         top_row.addWidget(self.gear_button)
 
@@ -118,7 +139,7 @@ class ControlPanel(QWidget):
         cutoff_row = QHBoxLayout()
         cutoff_row.setSpacing(8)
 
-        for band, title in (('low', 'Low Cutoffs'), ('high', 'High Cutoffs')):
+        for band, title in (('low', 'LOW CUTOFFS'), ('high', 'HIGH CUTOFFS')):
             cutoffs = self._cutoffs[band]
             group = QGroupBox(title)
             glayout = QVBoxLayout()
@@ -127,6 +148,7 @@ class ControlPanel(QWidget):
             for mode in range(3):
                 name = 'Quiet' if mode == 0 else f'Mode {mode}'
                 lbl = QLabel(f'{name}: {cutoffs[mode]}')
+                lbl.setStyleSheet(_LABEL_STYLE)
                 sld = QSlider(Qt.Horizontal)
                 sld.setRange(0, CUTOFF_SLIDER_MAX)
                 sld.setValue(cutoffs[mode])
@@ -142,6 +164,7 @@ class ControlPanel(QWidget):
 
         # ── Status label ──────────────────────────────────────────────────
         self.status_label = QLabel('Press any key')
+        self.status_label.setStyleSheet(_STATUS_STYLE)
         root.addWidget(self.status_label)
 
         self.setLayout(root)
@@ -151,7 +174,7 @@ class ControlPanel(QWidget):
         lbl = QLabel(f'{label}\n{value}')
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setFixedSize(38, 40)
-        lbl.setStyleSheet(_SMALL_DISPLAY_STYLE.format(color=color))
+        lbl.setStyleSheet(_DISPLAY_STYLE.format(color=color, border=_TILE_BORDER, size=11))
         return lbl
 
     @staticmethod
@@ -159,7 +182,7 @@ class ControlPanel(QWidget):
         lbl = QLabel(f'{band}\n{value}')
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setFixedSize(54, 52)
-        lbl.setStyleSheet(_MODE_DISPLAY_STYLE.format(color=color))
+        lbl.setStyleSheet(_DISPLAY_STYLE.format(color=color, border=style.mix(color, _TILE_BORDER, 0.35), size=15))
         return lbl
 
     def set_count_rate(self, frames: int):

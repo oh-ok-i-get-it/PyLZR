@@ -9,7 +9,8 @@ from ..core.app_logger import LOGGER_NAME, Tone, get_logger
 from ..core.output_switch import OutputSwitch
 from ..engine   import AudioEngine
 from ..midi     import MIDIOutput, KeyboardMapper
-from ..dmx      import DMXOutput, PortAddress
+from ..dmx      import DMXOutput, NodeDiscovery, PortAddress, node_choices
+from .                import style
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
 from .settings_panel  import SettingsPanel
@@ -35,7 +36,8 @@ class MainWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('PyLZR : SSP3CTRUM')
+        self.setWindowTitle('PyLZR')
+        style.dark_title_bar(self)                 # Windows only; no-op elsewhere
         self.setGeometry(100, 100, WINDOW_W, WINDOW_H)
 
         # Console first, so subsystem startup messages show in it
@@ -47,8 +49,10 @@ class MainWindow(QWidget):
         # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
         self._open_saved_midi_port()
+        self.discovery = NodeDiscovery(parent=self)     # the app's one Art-Net listener
         self.dmx_out  = DMXOutput(self.store.get('dmx/node_ip'),
-                                  PortAddress(*self.store.get('dmx/port_address')), parent=self)
+                                  PortAddress(*self.store.get('dmx/port_address')), parent=self,
+                                  discovery=self.discovery)
         self.output   = OutputSwitch({'MIDI': self.midi_out, 'DMX': self.dmx_out}, CONTROL_MODES[0])
         self.engine   = AudioEngine(self.output, parent=self,
                                     device_name=self.store.get('audio/device') or None)
@@ -88,6 +92,7 @@ class MainWindow(QWidget):
         engine.level_measured.connect(self.settings_panel.set_level)
         engine.diagnostics_updated.connect(self._on_diagnostics)
         self.dmx_out.status_changed.connect(self.settings_panel.set_dmx_status)
+        self.discovery.search_finished.connect(self._on_dmx_nodes_found)
 
         # Control panel → engine
         self.controls.count_rate_changed.connect(engine.set_count_rate)
@@ -106,8 +111,9 @@ class MainWindow(QWidget):
         self.settings_panel.control_mode_changed.connect(self._on_control_mode_changed)
         self.settings_panel.reset_requested.connect(self._reset_settings)
         self.settings_panel.audio_devices_refresh_requested.connect(self._rescan_audio_devices)
-        self.settings_panel.dmx_node_changed.connect(self._on_dmx_node_changed)
-        self.settings_panel.dmx_tester_requested.connect(self._open_dmx_tester)
+        self.settings_panel.dmx.node_changed.connect(self._on_dmx_node_changed)
+        self.settings_panel.dmx.tester_requested.connect(self._open_dmx_tester)
+        self.settings_panel.dmx.find_requested.connect(self._find_dmx_nodes)
 
         # Restore saved settings through the panels (same path as user input),
         # then save every later change
@@ -135,7 +141,7 @@ class MainWindow(QWidget):
         panel.set_fft_window(get('analysis/fft_window'))
         panel.set_smoothing(get('display/smoothing'))
         panel.set_log_level(get('app/log_level'))
-        panel.set_dmx_node(get('dmx/node_ip'), get('dmx/port_address'))
+        panel.dmx.set_node(get('dmx/node_ip'), get('dmx/port_address'))
         panel.set_control_mode(get('app/control_mode'))
 
     def _save_changes(self):
@@ -245,7 +251,7 @@ class MainWindow(QWidget):
         else:
             self._close_dmx_tester()
             self.dmx_out.stop()
-        self.settings_panel.set_dmx_tester_enabled(dmx)
+        self.settings_panel.dmx.set_tester_enabled(dmx)
         log.info(f'Control mode: {mode}', extra={'tone': Tone.MUTED})
 
     def _on_dmx_node_changed(self, ip: str, port_address: list[int]):
@@ -255,6 +261,23 @@ class MainWindow(QWidget):
         if self.dmx_out.configure(ip, port):
             self.store.set('dmx/node_ip', ip)
             self.store.set('dmx/port_address', port_address)
+
+    def _find_dmx_nodes(self):
+        """Look for Art-Net nodes on every network, and ask the configured node too."""
+        if self.discovery.search(extra_targets=[self.dmx_out.node_ip]):
+            self.settings_panel.dmx.set_searching(True)
+            log.info('DMX: looking for Art-Net nodes…', extra={'tone': Tone.MUTED})
+
+    def _on_dmx_nodes_found(self, replies: list):
+        choices = node_choices(replies)
+        self.settings_panel.dmx.set_searching(False)
+        for choice in choices:
+            log.info(f'DMX: found {choice.label}')
+        if not choices:
+            log.warning("DMX: no Art-Net nodes answered. Check the node is on and cabled, this "
+                        "computer's IP address and the firewall (see README, DMX Output).")
+        if self.settings_panel.isVisible():        # closed meanwhile: the log has the results
+            self.settings_panel.dmx.show_nodes(choices)
 
     def _open_dmx_tester(self):
         if self._dmx_tester is None:
@@ -293,6 +316,7 @@ class MainWindow(QWidget):
         self._close_dmx_tester()
         self.engine.shutdown()
         self.dmx_out.close()        # blacks out the fixtures if DMX was sending
+        self.discovery.close()
         self.midi_out.close()
         logging.getLogger(LOGGER_NAME).removeHandler(self.log_panel.log_handler)
         super().closeEvent(event)

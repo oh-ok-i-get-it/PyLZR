@@ -5,33 +5,33 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 
 from ..core import DMX_CHANNELS
-from . import theme
+from . import style, theme
 
 MAX_SHOWN     = 32   # sliders shown at once
 DEFAULT_SHOWN = 16
 
+# The faders use the app-wide slider look (gui/style.py); the warning is an amber strip
 _WINDOW_STYLE = (
-    'QWidget#DMXTester { background: #111111; }'
-    'QLabel { color: #8a8a8a; font-size: 10px; }'
-    f'QLabel#Warning {{ color: {theme.WARN}; }}'
-    'QLabel#Channel { color: #c9d1d9; font-weight: bold; }'
+    f'QWidget#DMXTester {{ background: {theme.BG}; }}'
+    f'QLabel {{ color: {theme.TEXT_DIM}; font-size: {theme.SIZE_LABEL}px; }}'
+    'QLabel#Warning {'
+    f'  color: {theme.WARN}; background: {style.mix(theme.WARN, theme.BG, 0.07)};'
+    f'  border: 1px solid {style.mix(theme.WARN, theme.BG, 0.25)}; border-radius: {theme.RADIUS}px;'
+    '  padding: 5px 10px;'
+    '}'
+    f'QLabel#Channel {{ color: {theme.TEXT_DIM}; font-family: "{theme.MONO_FONT}"; font-weight: bold; }}'
     'QSpinBox {'
-    '  background: #1a1a1a; color: #c9d1d9;'
-    '  border: 1px solid #2e2e2e; border-radius: 3px;'
-    '  padding: 1px 3px; font-size: 10px;'
+    f'  background: {theme.RAISED}; color: {theme.TEXT};'
+    f'  border: 1px solid {theme.BORDER_STRONG}; border-radius: {theme.RADIUS}px;'
+    f'  padding: 1px 3px; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
     '}'
     f'QSpinBox:hover, QSpinBox:focus {{ border-color: {theme.ACCENT}; }}'
-    'QSlider::groove:vertical { background: #2a2a2a; width: 4px; border-radius: 2px; }'
-    'QSlider::handle:vertical {'
-    f'  background: {theme.ACCENT}; height: 10px; width: 14px;'
-    '  margin: 0 -5px; border-radius: 5px;'
-    '}'
-    'QSlider::add-page:vertical { background: #3a5a8a; border-radius: 2px; }'
     'QPushButton {'
-    '  background: #1e1e1e; color: #c9d1d9; font-size: 10px;'
-    '  border: 1px solid #2e2e2e; border-radius: 3px; padding: 3px 10px;'
+    f'  background: {theme.BUTTON}; color: {theme.TEXT}; font-size: {theme.SIZE_LABEL}px;'
+    f'  border: 1px solid {theme.BORDER_STRONG}; border-radius: {theme.RADIUS}px; padding: 3px 10px;'
     '}'
     f'QPushButton:hover {{ border-color: {theme.ACCENT}; }}'
+    f'QPushButton:pressed {{ background: {theme.RAISED}; }}'
 )
 
 
@@ -72,6 +72,7 @@ class DMXTesterWindow(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(_WINDOW_STYLE)
         self.setWindowTitle('DMX Channel Tester')
+        style.dark_title_bar(self)                 # Windows only; no-op elsewhere
 
         self._sliders: list[QSlider] = []
         self._value_boxes: list[QSpinBox] = []

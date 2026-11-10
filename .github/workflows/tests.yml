@@ -29,6 +29,16 @@ jobs:
           uv export --frozen --no-hashes --no-emit-project -o requirements.txt
           git diff --exit-code requirements.txt
 
+  # The built packages (what pip installs) must include the shipped fixture
+  # files; the tests run from source, so they can't notice if one is left out
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv build
+      - run: python3 .github/check_package_data.py dist
+
   test:
     name: ${{ matrix.os }} / py${{ matrix.python }} / ${{ matrix.deps }} deps
     runs-on: ${{ matrix.os }}

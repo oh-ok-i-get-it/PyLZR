@@ -5,8 +5,9 @@ import pytest
 from PyQt5.QtCore import Qt
 
 from fakes import udp as fake_udp
-from helpers import dmx_packets, note_ons, tone_chunks, wait_for_note_offs, wait_until
+from helpers import artpollreply, dmx_packets, note_ons, tone_chunks, wait_for_note_offs, wait_until
 from pylzr.core import AVG_COUNT_RATE_DEFAULT
+from pylzr.dmx import build_artpoll
 from pylzr.gui.settings_store import DEFAULTS, SettingsStore
 
 DEFAULT_NODE = ('10.201.6.100', 6454)
@@ -17,7 +18,7 @@ def set_mode(harness, mode):
 
 
 def set_node(harness, ip, port_address):
-    harness.window.settings_panel.set_dmx_node(ip, port_address)
+    harness.window.settings_panel.dmx.set_node(ip, port_address)
 
 
 def frames():
@@ -38,7 +39,7 @@ def test_starts_in_midi_mode_sending_no_dmx(harness):
     assert w.output.active == 'MIDI'
     assert not w.dmx_out.active
     assert fake_udp.sent == []
-    assert not w.settings_panel._tester_btn.isEnabled()
+    assert not w.settings_panel.dmx._tester_btn.isEnabled()
     assert w.settings_panel._dmx_val.text() == 'Off'
 
 
@@ -50,7 +51,7 @@ def test_dmx_mode_sends_to_the_node_and_shows_status(harness):
     assert w.output.active == 'DMX' and w.dmx_out.active
     assert dmx_packets()[0]['to'] == DEFAULT_NODE
     assert w.settings_panel._dmx_val.text() == 'via 10.201.6.50'
-    assert w.settings_panel._tester_btn.isEnabled()
+    assert w.settings_panel.dmx._tester_btn.isEnabled()
     wait_until(lambda: len(dmx_packets()) >= 3)          # keeps streaming
 
 
@@ -84,7 +85,7 @@ def test_leaving_dmx_blacks_out_then_stops(harness, qapp):
     qapp.processEvents()
     assert len(fake_udp.sent) == sent and not w.dmx_out.active
     assert w.settings_panel._dmx_val.text() == 'Off'
-    assert not w.settings_panel._tester_btn.isEnabled()
+    assert not w.settings_panel.dmx._tester_btn.isEnabled()
 
 
 # ── Node settings ────────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ def test_mode_node_and_universe_are_restored_after_restart(make_window):
     w = make_window().window
     assert w.output.active == 'DMX' and w.dmx_out.active
     assert w.settings_panel._mode_combo.currentData() == 'DMX'
-    assert w.settings_panel._node_ip_edit.text() == '10.201.6.101'
+    assert w.settings_panel.dmx._node_ip_edit.text() == '10.201.6.101'
     assert {(p['to'], p['sub_uni']) for p in dmx_packets()} == {(('10.201.6.101', 6454), 3)}  # never the default
 
 
@@ -136,7 +137,7 @@ def test_reset_returns_to_midi_and_the_default_node(harness):
 # ── Channel tester ───────────────────────────────────────────────────────
 
 def open_tester(harness):
-    harness.window.settings_panel._tester_btn.click()
+    harness.window.settings_panel.dmx._tester_btn.click()
     return harness.window._dmx_tester
 
 
@@ -198,3 +199,81 @@ def test_control_mode_logged(harness, mode):
     log = harness.window.log_panel._text.toPlainText()
     assert f'Control mode: {mode}' in log
     assert 'not yet implemented' not in log
+
+
+# ── Node answers ─────────────────────────────────────────────────────────
+
+def test_node_that_answers_turns_the_indicator_green(harness):
+    w = harness.window
+    set_mode(harness, 'DMX')
+    assert ('10.201.6.100', 6454) in [to for data, to in fake_udp.sent if data == build_artpoll()]   # asked
+    fake_udp.arrive(artpollreply(), '10.201.6.100')
+    wait_until(lambda: w.settings_panel._dmx_val.toolTip() == 'CR011R answered · via 10.201.6.50')
+    assert w.dmx_out.state == 'connected'
+
+
+def test_closing_the_app_stops_listening(harness):
+    set_mode(harness, 'DMX')
+    harness.close()
+    listener = next(s for s in fake_udp.sockets if s.bound_to == ('', 6454))
+    assert listener.closed == 1
+
+
+# ── Find ─────────────────────────────────────────────────────────────────
+
+def find(harness):
+    """Show the window (offscreen) and its settings, as a user would, and click Find."""
+    w = harness.window
+    w.show()
+    w._toggle_settings()
+    assert w.settings_panel.isVisible()
+    w.settings_panel.dmx._find_btn.click()
+    return w
+
+
+def test_find_asks_every_network_and_the_set_node(harness):
+    w = find(harness)
+    polls = [to for data, to in fake_udp.sent if data == build_artpoll()]
+    assert polls == [('10.255.255.255', 6454), ('10.201.6.100', 6454)]
+    assert not w.settings_panel.dmx._find_btn.isEnabled()          # searching
+    assert dmx_packets() == []                   # finding sends no DMX (MIDI mode)
+
+
+def test_picking_a_found_node_configures_and_saves_it(harness):
+    w = find(harness)
+    fake_udp.arrive(artpollreply(ip='10.201.6.120', subnet=1, sw_out=(4,)), '10.201.6.120')
+    w.discovery._finish_search()
+    dmx = w.settings_panel.dmx
+    assert dmx._find_btn.isEnabled()
+    [action] = dmx._nodes_menu.actions()
+    assert action.text() == 'CR011R · 10.201.6.120 · 0:1:4'
+    action.trigger()
+    assert (w.dmx_out.node_ip, str(w.dmx_out.port)) == ('10.201.6.120', '0:1:4')
+    store = SettingsStore()
+    assert (store.get('dmx/node_ip'), store.get('dmx/port_address')) == ('10.201.6.120', [0, 1, 4])
+    assert 'DMX: found CR011R · 10.201.6.120 · 0:1:4' in w.log_panel._text.toPlainText()
+
+
+def test_nothing_found_logs_what_to_check(harness):
+    w = find(harness)
+    w.discovery._finish_search()
+    assert 'no Art-Net nodes answered' in w.log_panel._text.toPlainText()
+    assert [a.text() for a in w.settings_panel.dmx._nodes_menu.actions()] == [
+        'No Art-Net nodes answered (see the log)']
+
+
+def test_settings_closed_during_the_search_shows_no_menu(harness):
+    w = find(harness)
+    w._toggle_settings()                         # closed
+    fake_udp.arrive(artpollreply(), '10.201.6.100')
+    w.discovery._finish_search()
+    assert w.settings_panel.dmx._nodes_menu is None
+    assert w.settings_panel.dmx._find_btn.isEnabled()
+    assert 'DMX: found CR011R · 10.201.6.100 · 0:0:0' in w.log_panel._text.toPlainText()
+
+
+def test_search_ends_by_itself_in_the_app(harness):
+    w = find(harness)
+    w.discovery._search_timer.setInterval(10)    # instead of 2 s
+    w.discovery._search_timer.start()
+    wait_until(lambda: w.settings_panel.dmx._find_btn.isEnabled())

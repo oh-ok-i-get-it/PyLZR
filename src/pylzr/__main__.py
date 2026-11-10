@@ -7,7 +7,8 @@ from .core.app_logger import configure_console_logging
 def main():
     app = QApplication(sys.argv)
     configure_console_logging()
-    from .gui import MainWindow  # imported here so QApplication exists before any widget module loads
+    from .gui import MainWindow, style  # imported here so QApplication exists before any widget module loads
+    style.apply(app)                     # before any window: fonts, palette, stylesheet, plot colours
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())

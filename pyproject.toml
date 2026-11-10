@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylzr"
-version = "0.4.0"
+version = "0.5.0"
 description = "Sound-reactive DMX laser controller"
 readme = "README.md"
 license = "MIT"
@@ -47,6 +47,13 @@ extra-build-variables = { pyaudio = { CFLAGS = "-I/opt/homebrew/include -I/usr/l
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Shipped fixture files (profiles, bindings) and GUI assets (fonts and their
+# licences). CI's package job checks every one of them ends up in the built
+# packages.
+[tool.setuptools.package-data]
+"pylzr.fixtures" = ["data/**/*.json"]
+"pylzr.gui" = ["assets/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

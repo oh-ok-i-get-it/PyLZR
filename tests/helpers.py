@@ -34,10 +34,44 @@ def tone_chunks(n_chunks: int, *components: tuple[float, float]) -> np.ndarray:
 
 
 def dmx_packets() -> list[dict]:
-    """Every Art-Net packet sent through the fake network so far, decoded:
-    to (host, port), sequence, sub_uni, net, data (the channel values)."""
+    """Every ArtDmx packet sent through the fake network so far, decoded:
+    to (host, port), sequence, sub_uni, net, data (the channel values).
+    Other Art-Net packets (ArtPoll) are left out."""
     return [{'to': to, 'sequence': p[12], 'sub_uni': p[14], 'net': p[15], 'data': p[18:]}
-            for p, to in fake_udp.sent]
+            for p, to in fake_udp.sent if p[8:10] == b'\x00\x50']
+
+
+def artpollreply(*, ip='10.201.6.100', short_name=b'CR011R', long_name=b'Art-Net node',
+                 report=b'#0001 [0001] Power On Tests successful', net=0, subnet=0,
+                 port_types=(0x80,), sw_out=(0,), num_ports=None,
+                 mac=b'\x00\x1a\x2b\x3c\x4d\x5e', bind_index=1) -> bytes:
+    """A full 239-byte ArtPollReply, written field by field from the Art-Net 4
+    table (independently of pylzr's parser). Defaults: a one-port node that
+    outputs universe 0:0:0, like a factory-set CR011R."""
+    def field(value: bytes, size: int) -> bytes:
+        return value[:size].ljust(size, b'\x00')
+
+    packet = b''.join([
+        b'Art-Net\x00', b'\x00\x21',                  # ID, OpCode 0x2100 (low byte first)
+        bytes(int(part) for part in ip.split('.')),   # IP address
+        b'\x36\x19',                                  # Port 0x1936 (low byte first)
+        b'\x00\x01',                                  # VersInfoH, VersInfoL
+        bytes([net, subnet]),                         # NetSwitch, SubSwitch
+        bytes(6),                                     # OemHi, Oem, Ubea, Status1, EstaManLo, EstaManHi
+        field(short_name, 18),                        # ShortName
+        field(long_name, 64),                         # LongName
+        field(report, 64),                            # NodeReport
+        bytes([0, len(port_types) if num_ports is None else num_ports]),   # NumPortsHi, NumPortsLo
+        field(bytes(port_types), 4),                  # PortTypes
+        bytes(12),                                    # GoodInput, GoodOutputA, SwIn
+        field(bytes(sw_out), 4),                      # SwOut
+        bytes(7),                                     # AcnPriority, SwMacro, SwRemote, Spare x3, Style
+        field(mac, 6),                                # MAC
+        bytes(int(part) for part in ip.split('.')),   # BindIp
+        bytes([bind_index]),                          # BindIndex
+    ])
+    assert len(packet) == 212
+    return packet.ljust(239, b'\x00')                 # Status2 … Filler
 
 
 def note_messages() -> list[list[int]]:

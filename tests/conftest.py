@@ -54,14 +54,17 @@ def _fresh_state(tmp_path):
 
 @pytest.fixture(autouse=True)
 def _no_real_network(monkeypatch):
-    """Windows send DMX through fake sockets, so no test ever puts Art-Net
-    packets on the real network (tests of pylzr.dmx pass FakeSocket or a
+    """Windows send DMX and look for nodes through fake sockets, so no test
+    ever puts Art-Net packets on the real network or depends on this
+    computer's network adapters (tests of pylzr.dmx pass FakeSocket or a
     loopback address themselves)."""
     from functools import partial
 
     import pylzr.gui.main_window as main_window
-    from pylzr.dmx import DMXOutput
+    from pylzr.dmx import DMXOutput, NodeDiscovery
     monkeypatch.setattr(main_window, 'DMXOutput', partial(DMXOutput, socket_factory=fake_udp.FakeSocket))
+    monkeypatch.setattr(main_window, 'NodeDiscovery', partial(NodeDiscovery, socket_factory=fake_udp.FakeSocket,
+                                                              broadcasts=lambda: ['10.255.255.255']))
 
 
 @pytest.fixture(params=['win', 'mac'])

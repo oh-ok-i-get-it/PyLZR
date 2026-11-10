@@ -4,5 +4,7 @@ from .control_panel  import ControlPanel
 from .settings_panel import SettingsPanel
 from .log_panel      import LogPanel, AvgPanel
 from .dmx_tester     import DMXTesterWindow
+from .dmx_settings   import DMXSettings
 
-__all__ = ['MainWindow', 'SpectrumWidget', 'ControlPanel', 'SettingsPanel', 'LogPanel', 'AvgPanel', 'DMXTesterWindow']
+__all__ = ['MainWindow', 'SpectrumWidget', 'ControlPanel', 'SettingsPanel', 'LogPanel', 'AvgPanel', 'DMXTesterWindow',
+           'DMXSettings']
