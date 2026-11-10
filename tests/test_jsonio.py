@@ -114,6 +114,16 @@ def test_child_and_each_carry_the_path():
     reader.finish()
 
 
+def test_keys_and_rest():
+    """rest() hands over the keys not asked for yet, which then count as read."""
+    reader = ObjectReader({'type': 'Speed', 'speedStart': 'fast', 'speedEnd': 'slow'})
+    assert reader.keys() == ['type', 'speedStart', 'speedEnd']
+    reader.required('type', str)
+    assert reader.rest() == {'speedStart': 'fast', 'speedEnd': 'slow'}
+    assert reader.rest() == {}
+    reader.finish()
+
+
 def test_fail_builds_errors_at_the_right_place():
     reader = ObjectReader({'range': [0, 300]}, 'attributes[1]', BindingError)
     error = reader.fail('0–300 is outside 0–255', 'range')

@@ -84,9 +84,20 @@ class ObjectReader:
         """An error at this object (or at its `key`), to raise."""
         return self.error(message, self.path(key) if key else self.where)
 
+    def keys(self) -> list[str]:
+        """The object's keys, in file order."""
+        return list(self._data)
+
     def has(self, key: str) -> bool:
         self._asked.add(key)
         return key in self._data
+
+    def rest(self) -> dict[str, Any]:
+        """Every key not asked for yet, with its value; they then count as
+        read (for objects whose other keys are checked by the caller)."""
+        rest = {key: value for key, value in self._data.items() if key not in self._asked}
+        self._asked.update(rest)
+        return rest
 
     def required(self, key: str, kind: type | tuple[type, ...]) -> Any:
         if not self.has(key):
