@@ -39,8 +39,19 @@ SIZE_BODY    = 12   # default text, buttons, inputs
 SIZE_TITLE   = 14   # Sound Mode button
 SIZE_NUMBER  = 20   # LOW / HIGH readouts
 
+TRACKING = 112     # letter spacing of small-caps titles, % of normal (stylesheets can't set it)
+
 RADIUS      = 6     # buttons, inputs
 RADIUS_CARD = 8     # cards, panels, menus
+TILE_BORDER = '#222222'   # indicator tile edge (LOW / HIGH tint it with their band colour)
+
+# Layout metrics (px)
+MARGIN      = 10    # window edge to content
+GAP         = 8     # between neighbouring cards and rows
+CARD_PAD_X  = 14    # card padding, left / right
+CARD_PAD_Y  = 10    # card padding, top / bottom
+TOP_ROW_H   = 64    # rate card, Sound Mode and tiles row
+PLOT_AXIS_W = 52    # left axis width, the same on both plots so they line up
 
 # In-app console colours: tagged tones first, then by log level
 LOG_TONES = {

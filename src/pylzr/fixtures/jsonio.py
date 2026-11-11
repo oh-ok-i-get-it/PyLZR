@@ -171,29 +171,53 @@ def upgrade(data: Any, current: int, migrations: Mapping[int, Callable[[dict], d
 
 def dumps(data: Any) -> str:
     """Stable text for a data file: 2-space indent, keys in the order given,
-    non-ASCII kept as is (e.g. '→'), short lists of plain values on one line
-    (e.g. "range": [0, 255]), and a final newline."""
+    non-ASCII kept as is (e.g. '→') and a final newline. A short list of
+    plain values stays on one line ("range": [0, 255]), and so does a short
+    object of them under a key ("red": {"Color": 8}), though never one in a
+    list, so lists of objects line up; a long list of plain values fills
+    its lines."""
     return _format(data, 0) + '\n'
 
 
-def _format(value: Any, depth: int) -> str:
+def _plain(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _format(value: Any, depth: int, keyed: bool = False) -> str:
+    """`keyed`: the value of an object's key (only those objects may go on one line)."""
     pad, inner = '  ' * depth, '  ' * (depth + 1)
     if isinstance(value, dict):
         if not value:
             return '{}'
-        items = [f'{inner}{json.dumps(str(k), ensure_ascii=False)}: {_format(v, depth + 1)}'
-                 for k, v in value.items()]
+        if keyed and not any(isinstance(v, (dict, list)) for v in value.values()):
+            one_line = '{' + ', '.join(f'{_plain(str(k))}: {_plain(v)}' for k, v in value.items()) + '}'
+            if len(inner) + len(one_line) <= _LINE_WIDTH:
+                return one_line
+        items = [f'{inner}{_plain(str(k))}: {_format(v, depth + 1, keyed=True)}' for k, v in value.items()]
         return '{\n' + ',\n'.join(items) + f'\n{pad}}}'
     if isinstance(value, list):
         if not value:
             return '[]'
         if not any(isinstance(item, (dict, list)) for item in value):
-            one_line = '[' + ', '.join(json.dumps(item, ensure_ascii=False) for item in value) + ']'
+            words = [_plain(item) for item in value]
+            one_line = '[' + ', '.join(words) + ']'
             if len(inner) + len(one_line) <= _LINE_WIDTH:
                 return one_line
+            return '[\n' + ',\n'.join(_fill(words, inner)) + f'\n{pad}]'
         items = [inner + _format(item, depth + 1) for item in value]
         return '[\n' + ',\n'.join(items) + f'\n{pad}]'
-    return json.dumps(value, ensure_ascii=False)
+    return _plain(value)
+
+
+def _fill(words: list[str], indent: str) -> list[str]:
+    """Plain values packed onto lines of at most _LINE_WIDTH (one per line if it's longer)."""
+    lines: list[str] = []
+    for word in words:
+        if lines and len(lines[-1]) + len(', ') + len(word) + len(',') <= _LINE_WIDTH:
+            lines[-1] += ', ' + word
+        else:
+            lines.append(indent + word)
+    return lines
 
 
 def write_file(path: Path | str, data: Any):

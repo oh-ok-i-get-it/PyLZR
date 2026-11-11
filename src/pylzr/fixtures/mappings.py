@@ -16,7 +16,13 @@ binding's safety rules are checked exhaustively, not by sampling.
 A mapping is *active* when it has something to say, and then claims its
 channels; when several mappings share a channel (a static angle and a spin,
 say) the renderer gives it to the first active one. A motion with no "off"
-value is inactive at 0, which hands the channel back to the static setting.
+value is inactive at 0, which hands the channel back to the static setting;
+a Linear mapping can do the same (release_at_zero: wave_x at 0 lets wave_y
+have a shared wave channel).
+
+off_values() are the values a mapping sends to mean "off" or "nothing" (a
+strobe's zero, a speed's off, a choice called off or none): the only values
+a binding may send on a profile's NoFunction segments.
 """
 
 import math
@@ -30,7 +36,10 @@ from .attributes import NAME_RE, Kind
 
 DMX_MAX = 255
 
+OFF_CHOICES = ('off', 'none')       # option choices that mean "nothing"
+
 Values = Mapping[str, Any]          # attribute name → validated value, for one layer
+Outputs = dict[str, frozenset[int]] # channel → DMX values
 
 
 def dmx_round(value: float) -> int:
@@ -61,6 +70,15 @@ def _span(start: int, end: int) -> frozenset[int]:
     return frozenset(range(min(start, end), max(start, end) + 1))
 
 
+def _merge(*parts: Mapping[str, frozenset]) -> dict[str, frozenset]:
+    """Per-key unions, keys in first-seen order."""
+    merged: dict[str, frozenset] = {}
+    for part in parts:
+        for key, values in part.items():
+            merged[key] = merged.get(key, frozenset()) | values
+    return merged
+
+
 class AttributeMapping(ABC):
     """What every mapping type offers."""
 
@@ -87,8 +105,16 @@ class AttributeMapping(ABC):
         """The DMX value for each of its channels (call only when active)."""
 
     @abstractmethod
-    def outputs(self) -> dict[str, frozenset[int]]:
+    def outputs(self) -> Outputs:
         """Every DMX value it could ever send, per channel."""
+
+    def off_values(self) -> Outputs:
+        """The values among outputs() that mean "off" or "nothing", per channel."""
+        return {}
+
+    def options(self) -> dict[str, frozenset[str]]:
+        """The choices it reads from each option attribute."""
+        return {}
 
 
 @dataclass(frozen=True)
@@ -96,16 +122,20 @@ class Linear(AttributeMapping):
     """A continuous attribute (0..1) across a gradient segment: 0 sends
     `start`, 1 sends `end` (either may be the larger, e.g. a size channel
     running large → small). Calibration: min/max say which part of the
-    attribute's range this fixture uses (0.1 / 0.9: never the extremes). An
-    attribute of exactly 0 sends `zero` instead, if given (strobe 0 = off)."""
+    attribute's range this fixture uses (0.1 / 0.9: never the extremes).
 
-    attribute: str
-    channel:   str
-    start:     int
-    end:       int
-    min:       float = 0.0
-    max:       float = 1.0
-    zero:      int | None = None
+    An attribute of exactly 0 can instead send `zero` (strobe 0 = off), or,
+    with release_at_zero, send nothing: the mapping is then inactive, so
+    another mapping can have the channel (wave_x 0 lets wave_y use it)."""
+
+    attribute:       str
+    channel:         str
+    start:           int
+    end:             int
+    min:             float = 0.0
+    max:             float = 1.0
+    zero:            int | None = None
+    release_at_zero: bool = False
 
     def __post_init__(self):
         _check_name(self.attribute, 'attribute')
@@ -117,6 +147,8 @@ class Linear(AttributeMapping):
             raise ValueError(f'min ({self.min:g}) is above max ({self.max:g})')
         if self.zero is not None:
             _check_dmx(self.zero, 'zero')
+            if self.release_at_zero:
+                raise ValueError('at 0 it either sends zero or releases the channel, not both')
 
     @property
     def kinds(self) -> dict[str, Kind]:
@@ -127,7 +159,7 @@ class Linear(AttributeMapping):
         return (self.channel,)
 
     def active(self, values: Values) -> bool:
-        return self.attribute in values
+        return self.attribute in values and not (self.release_at_zero and values[self.attribute] == 0)
 
     def _at(self, fraction: float) -> int:
         return dmx_round(self.start + fraction * (self.end - self.start))
@@ -138,9 +170,15 @@ class Linear(AttributeMapping):
             return {self.channel: self.zero}
         return {self.channel: self._at(self.min + value * (self.max - self.min))}
 
-    def outputs(self) -> dict[str, frozenset[int]]:
+    def outputs(self) -> Outputs:
         values = _span(self._at(self.min), self._at(self.max))
-        return {self.channel: values | ({self.zero} if self.zero is not None else set())}
+        return {self.channel: values | self._zero()}
+
+    def off_values(self) -> Outputs:
+        return {self.channel: self._zero()} if self.zero is not None else {}
+
+    def _zero(self) -> frozenset[int]:
+        return frozenset() if self.zero is None else frozenset({self.zero})
 
 
 @dataclass(frozen=True)
@@ -185,7 +223,7 @@ class Bipolar(AttributeMapping):
     def render(self, values: Values) -> dict[str, int]:
         return {self.channel: self._at(values[self.attribute])}
 
-    def outputs(self) -> dict[str, frozenset[int]]:
+    def outputs(self) -> Outputs:
         return {self.channel: _span(self._at(-1), self._at(1))}
 
 
@@ -239,9 +277,14 @@ class Direction(AttributeMapping):
         speed = (abs(value) - self.deadband) / (1 - self.deadband)
         return {self.channel: dmx_round(slow + speed * (fast - slow))}
 
-    def outputs(self) -> dict[str, frozenset[int]]:
-        values = _span(*self.forward) | _span(*self.reverse)
-        return {self.channel: values | ({self.off} if self.off is not None else set())}
+    def outputs(self) -> Outputs:
+        return {self.channel: _span(*self.forward) | _span(*self.reverse) | self._off()}
+
+    def off_values(self) -> Outputs:
+        return {self.channel: self._off()} if self.off is not None else {}
+
+    def _off(self) -> frozenset[int]:
+        return frozenset() if self.off is None else frozenset({self.off})
 
 
 @dataclass(frozen=True)
@@ -279,12 +322,18 @@ class Options(AttributeMapping):
     def render(self, values: Values) -> dict[str, int]:
         return dict(self.values[values[self.attribute]])
 
-    def outputs(self) -> dict[str, frozenset[int]]:
-        found: dict[str, set[int]] = {ch: set() for ch in self.channels}
-        for settings in self.values.values():
-            for ch, value in settings.items():
-                found[ch].add(value)
-        return {ch: frozenset(values) for ch, values in found.items()}
+    def outputs(self) -> Outputs:
+        return self._sent(self.values)
+
+    def off_values(self) -> Outputs:
+        return self._sent({option: s for option, s in self.values.items() if option in OFF_CHOICES})
+
+    def options(self) -> dict[str, frozenset[str]]:
+        return {self.attribute: frozenset(self.values)}
+
+    @staticmethod
+    def _sent(choices: Mapping[str, Mapping[str, int]]) -> Outputs:
+        return _merge(*({ch: frozenset({value}) for ch, value in s.items()} for s in choices.values()))
 
 
 @dataclass(frozen=True)
@@ -334,9 +383,11 @@ class Selected(AttributeMapping):
     def render(self, values: Values) -> dict[str, int]:
         return self.chosen(values).render(values)
 
-    def outputs(self) -> dict[str, frozenset[int]]:
-        found: dict[str, frozenset[int]] = {}
-        for inner in self.choices.values():
-            for ch, values in inner.outputs().items():
-                found[ch] = found.get(ch, frozenset()) | values
-        return found
+    def outputs(self) -> Outputs:
+        return _merge(*(inner.outputs() for inner in self.choices.values()))
+
+    def off_values(self) -> Outputs:
+        return _merge(*(inner.off_values() for inner in self.choices.values()))
+
+    def options(self) -> dict[str, frozenset[str]]:
+        return _merge({self.selector: frozenset(self.choices)}, *(inner.options() for inner in self.choices.values()))

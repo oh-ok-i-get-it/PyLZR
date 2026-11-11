@@ -4,6 +4,13 @@ stylesheet and pyqtgraph's colours, all built from the tokens in theme.py.
 apply() runs once in __main__.main(), right after the QApplication exists and
 before any window is built. It only changes how widgets look. A widget's own
 setStyleSheet() still wins over these rules where both set the same thing.
+
+Style roles (set with widgets.set_role(); rules in role_rules()). Prefer these
+building blocks from gui/widgets.py over per-widget stylesheets:
+    section   SectionTitle: small-caps title; tone 'accent' (default) or 'dim'
+    card      Card: rounded panel on the window background
+    tile      IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
+    value     ValueLabel: 'Name: value' with a bright mono value
 """
 
 import sys
@@ -294,6 +301,28 @@ QMenu {{
 QMenu::item {{ padding: 5px 12px; border-radius: 5px; }}
 QMenu::item:selected {{ background: {tint}; }}
 QMenu::item:disabled {{ color: {t.TEXT_MUTED}; }}
+{role_rules()}'''
+
+
+def role_rules() -> str:
+    """Rules for the style roles set by gui/widgets.py (setProperty('role', ...)).
+    Fonts that need letter spacing are set on the widget instead (see widgets.title_font)."""
+    t = theme
+    return f'''
+QLabel[role="section"] {{ color: {t.ACCENT}; background: transparent; }}
+QLabel[role="section"][tone="dim"] {{ color: {t.TEXT_DIM}; }}
+
+QFrame[role="card"] {{
+    background: {t.CARD}; border: 1px solid {t.BORDER}; border-radius: {t.RADIUS_CARD}px;
+}}
+
+QLabel[role="tile"] {{
+    background: {t.CARD}; border: 1px solid {t.TILE_BORDER}; border-radius: {t.RADIUS_CARD}px;
+}}
+QLabel[role="tile"][tone="low"]  {{ border-color: {mix(t.LOW_BAND, t.TILE_BORDER, 0.35)}; }}
+QLabel[role="tile"][tone="high"] {{ border-color: {mix(t.HIGH_BAND, t.TILE_BORDER, 0.35)}; }}
+
+QLabel[role="value"] {{ background: transparent; }}
 '''
 
 

@@ -4,10 +4,8 @@
 from PyQt5.QtWidgets import QLabel, QWidget
 
 from . import theme
+from .widgets import SectionTitle
 
-SECTION_STYLE = (
-    f'color: {theme.ACCENT}; font-size: {theme.SIZE_SECTION}px; font-weight: 600; background: transparent;'
-)
 LABEL_STYLE   = f'color: {theme.TEXT_DIM}; font-size: {theme.SIZE_LABEL}px; background: transparent;'
 
 INPUT_STYLE = (
@@ -40,8 +38,8 @@ def label(text: str, style: str = LABEL_STYLE) -> QLabel:
 
 
 def section(text: str) -> QLabel:
-    """A section title, e.g. 'AUDIO'."""
-    return label(text, SECTION_STYLE)
+    """A section title, e.g. 'AUDIO' (letter-spaced; see widgets.SectionTitle)."""
+    return SectionTitle(text)
 
 
 def pad(layout, t=8, r=12, b=8, l=12) -> QWidget:  # noqa: E741 — top/right/bottom/left
