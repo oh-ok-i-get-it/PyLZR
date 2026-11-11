@@ -1,49 +1,22 @@
 from collections.abc import Sequence
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
+    QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QPushButton,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSignalBlocker, QSize
 from . import style, theme
+from .widgets import Card, IndicatorTile, ValueLabel, set_role
 from ..core import (
     CUTOFF_SLIDER_MAX,
     AVG_COUNT_RATE_DEFAULT, AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX,
     DEFAULT_LOW_THRESHOLDS, DEFAULT_HIGH_THRESHOLDS,
 )
 
-_TILE_BORDER = '#222222'
-
-# Indicator tiles: two lines of mono text ('LOW\n2'), band colour on LOW / HIGH
-_DISPLAY_STYLE = (
-    'QLabel {{ background: ' + theme.CARD + '; color: {color};'
-    ' border: 1px solid {border}; border-radius: ' + str(theme.RADIUS_CARD) + 'px;'
-    ' font-family: "' + theme.MONO_FONT + '"; font-size: {size}px; font-weight: bold; }}'
-)
-
-# Sound Mode: a dark tile when off; green tint, border and lit dot (its icon) when on
-_SM_STYLE = (
-    f'QPushButton {{ background: {theme.CARD}; color: {theme.TEXT_DIM};'
-    f' border: 1px solid #262626; border-radius: {theme.RADIUS_CARD}px;'
-    f' font-size: {theme.SIZE_TITLE}px; font-weight: 600; padding: 0 12px; }}'
-    'QPushButton:hover { border-color: #3a3a3a; }'
-    f'QPushButton:checked {{ background: {style.mix(theme.OK, theme.BG, 0.09)};'
-    f' color: {style.mix(theme.OK, "#ffffff", 0.5)}; border-color: {style.mix(theme.OK, theme.BG, 0.55)}; }}'
-    f'QPushButton:checked:hover {{ border-color: {theme.OK}; }}'
-)
-
-# Gear: icon only; outlined on hover, accent while the settings panel is open
-_GEAR_STYLE = (
-    'QPushButton { background: transparent; border: 1px solid transparent;'
-    f' border-radius: {theme.RADIUS}px; padding: 0; color: {theme.TEXT_DIM}; font-size: 17px; }}'
-    f'QPushButton:hover {{ background: {theme.BUTTON}; border-color: {theme.BORDER_STRONG}; }}'
-    f'QPushButton:checked {{ background: {style.mix(theme.ACCENT, theme.BG, 0.14)};'
-    f' border-color: {theme.ACCENT}; color: {theme.ACCENT}; }}'
-)
-
-_LABEL_STYLE  = f'color: {theme.TEXT_DIM}; font-size: {theme.SIZE_LABEL}px; font-weight: normal;'
-_STATUS_STYLE = f'color: {theme.TEXT_MUTED}; font-size: {theme.SIZE_LABEL}px;'
-_VALUE_STYLE  = f'color: {theme.TEXT}; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_BODY}px; font-weight: bold;'
+# Looks come from style roles (gui/style.py): 'sound-mode', 'toolbar-button', 'status',
+# and the gui/widgets.py building blocks (Card, IndicatorTile, ValueLabel)
+_SMALL_TILE = (38, 40)      # DM, CNT
+_BIG_TILE   = (54, 52)      # LOW, HIGH
 
 
 class ControlPanel(QWidget):
@@ -75,43 +48,39 @@ class ControlPanel(QWidget):
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
 
-        # Avg-rate slider (compact fixed width)
-        rate_group = QGroupBox('AVGS CALC RATE')
-        rate_group.setMaximumWidth(200)
-        rate_layout = QHBoxLayout()           # value beside the slider
-        rate_layout.setContentsMargins(2, 0, 2, 0)
-        rate_layout.setSpacing(8)
-        self._count_label = QLabel(str(AVG_COUNT_RATE_DEFAULT))
-        self._count_label.setStyleSheet(_VALUE_STYLE)
+        # Avg-rate slider (compact fixed width), value beside it
+        rate_card = Card('AVGS CALC RATE', body=QHBoxLayout(), margins=(12, 9, 12, 9))
+        rate_card.setMaximumWidth(200)
+        rate_card.body.setSpacing(8)
+        self._count_label = ValueLabel(str(AVG_COUNT_RATE_DEFAULT))
         self._count_slider = QSlider(Qt.Horizontal)
         self._count_slider.setRange(AVG_COUNT_RATE_MIN, AVG_COUNT_RATE_MAX)
         self._count_slider.setValue(AVG_COUNT_RATE_DEFAULT)
         self._count_slider.setTickInterval(5)
         self._count_slider.setTickPosition(QSlider.TicksBelow)
         self._count_slider.valueChanged.connect(self._on_count_rate)
-        rate_layout.addWidget(self._count_slider)
-        rate_layout.addWidget(self._count_label)
-        rate_group.setLayout(rate_layout)
+        rate_card.addWidget(self._count_slider, stretch=1)
+        rate_card.addWidget(self._count_label)
 
-        # Sound mode toggle button
+        # Sound mode toggle button: dark tile when off; green tint, border and lit dot (its icon) when on
         self._sm_button = QPushButton('Sound Mode: OFF')
         self._sm_button.setCheckable(True)
         self._sm_button.setFixedHeight(52)
         self._sm_button.setMinimumWidth(160)
-        self._sm_button.setStyleSheet(_SM_STYLE)
+        set_role(self._sm_button, 'sound-mode')
         self._sm_button.setIcon(style.status_dot_icon(theme.DISABLED, theme.OK))
         self._sm_button.setIconSize(QSize(16, 16))
         self._sm_button.clicked.connect(lambda: self.sound_mode_toggled.emit())
 
         # Dual mode + count displays (small, muted — right of button)
-        self._dm_display       = self._make_small_display('DM', '—', theme.TEXT_DIM)
-        self._dm_count_display = self._make_small_display('CNT', '—', theme.TEXT_DIM)
+        self._dm_display       = self._make_tile('DM\n—',  'neutral', _SMALL_TILE)
+        self._dm_count_display = self._make_tile('CNT\n—', 'neutral', _SMALL_TILE)
 
         # Current sound mode index displays (LOW / HIGH)
-        self._low_mode_display  = self._make_mode_display('LOW',  '—', theme.LOW_BAND)
-        self._high_mode_display = self._make_mode_display('HIGH', '—', theme.HIGH_BAND)
+        self._low_mode_display  = self._make_tile('LOW\n—',  'low',  _BIG_TILE)
+        self._high_mode_display = self._make_tile('HIGH\n—', 'high', _BIG_TILE)
 
-        top_row.addWidget(rate_group)
+        top_row.addWidget(rate_card)
         top_row.addWidget(self._sm_button)
         top_row.addWidget(self._dm_display)
         top_row.addWidget(self._dm_count_display)
@@ -124,7 +93,7 @@ class ControlPanel(QWidget):
         self.gear_button.setFixedSize(30, 30)
         self.gear_button.setCheckable(True)
         self.gear_button.setToolTip('Settings')
-        self.gear_button.setStyleSheet(_GEAR_STYLE)
+        set_role(self.gear_button, 'toolbar-button')    # icon only; accent while settings are open
         gear_icon = style.icon('settings', theme.TEXT_DIM, on_color=theme.ACCENT)
         if not gear_icon.isNull():              # otherwise the ⚙ glyph stays
             self.gear_button.setIcon(gear_icon)
@@ -141,49 +110,37 @@ class ControlPanel(QWidget):
 
         for band, title in (('low', 'LOW CUTOFFS'), ('high', 'HIGH CUTOFFS')):
             cutoffs = self._cutoffs[band]
-            group = QGroupBox(title)
-            glayout = QVBoxLayout()
-            glayout.setContentsMargins(4, 4, 4, 4)
-            glayout.setSpacing(2)
+            card = Card(title)
+            card.body.setSpacing(2)
             for mode in range(3):
                 name = 'Quiet' if mode == 0 else f'Mode {mode}'
-                lbl = QLabel(f'{name}: {cutoffs[mode]}')
-                lbl.setStyleSheet(_LABEL_STYLE)
+                lbl = ValueLabel(f'{name}: {cutoffs[mode]}')
                 sld = QSlider(Qt.Horizontal)
                 sld.setRange(0, CUTOFF_SLIDER_MAX)
                 sld.setValue(cutoffs[mode])
                 sld.valueChanged.connect(lambda v, b=band, m=mode: self._on_cutoff(b, m, v))
-                glayout.addWidget(lbl)
-                glayout.addWidget(sld)
+                card.addWidget(lbl)
+                card.addWidget(sld)
                 self._cutoff_labels[band].append(lbl)
                 self._cutoff_sliders[band].append(sld)
-            group.setLayout(glayout)
-            cutoff_row.addWidget(group)
+            cutoff_row.addWidget(card)
 
         root.addLayout(cutoff_row)
 
         # ── Status label ──────────────────────────────────────────────────
         self.status_label = QLabel('Press any key')
-        self.status_label.setStyleSheet(_STATUS_STYLE)
+        set_role(self.status_label, 'status')
         root.addWidget(self.status_label)
 
         self.setLayout(root)
 
     @staticmethod
-    def _make_small_display(label: str, value: str, color: str) -> QLabel:
-        lbl = QLabel(f'{label}\n{value}')
-        lbl.setAlignment(Qt.AlignCenter)
-        lbl.setFixedSize(38, 40)
-        lbl.setStyleSheet(_DISPLAY_STYLE.format(color=color, border=_TILE_BORDER, size=11))
-        return lbl
-
-    @staticmethod
-    def _make_mode_display(band: str, value: str, color: str) -> QLabel:
-        lbl = QLabel(f'{band}\n{value}')
-        lbl.setAlignment(Qt.AlignCenter)
-        lbl.setFixedSize(54, 52)
-        lbl.setStyleSheet(_DISPLAY_STYLE.format(color=color, border=style.mix(color, _TILE_BORDER, 0.35), size=15))
-        return lbl
+    def _make_tile(text: str, tone: str, size: tuple[int, int]) -> IndicatorTile:
+        """An indicator tile: small label over a number (bigger on the big tiles)."""
+        big = size == _BIG_TILE
+        tile = IndicatorTile(text, tone, value_size=theme.SIZE_NUMBER if big else theme.SIZE_BODY + 2)
+        tile.setFixedSize(*size)
+        return tile
 
     def set_count_rate(self, frames: int):
         """As if the user moved the slider (emits count_rate_changed if it changes)."""

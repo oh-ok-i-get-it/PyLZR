@@ -17,6 +17,7 @@ RAISED        = '#141414'   # inputs and dropdowns
 BUTTON        = '#161616'   # button face
 BORDER        = '#1c1c1c'   # card edges
 BORDER_STRONG = '#2a2a2a'   # input and button edges
+HOVER_EDGE    = '#3a3a3a'   # edge of a dark tile-like button under the mouse
 GROOVE        = '#2a2a2a'   # unfilled part of a slider
 TEXT          = '#e6e8eb'   # values, button text
 TEXT_DIM      = '#9aa0a6'   # labels

@@ -7,10 +7,13 @@ setStyleSheet() still wins over these rules where both set the same thing.
 
 Style roles (set with widgets.set_role(); rules in role_rules()). Prefer these
 building blocks from gui/widgets.py over per-widget stylesheets:
-    section   SectionTitle: small-caps title; tone 'accent' (default) or 'dim'
-    card      Card: rounded panel on the window background
-    tile      IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
-    value     ValueLabel: 'Name: value' with a bright mono value
+    section         SectionTitle: small-caps title; tone 'accent' (default) or 'dim'
+    card            Card: rounded panel on the window background
+    tile            IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
+    value           ValueLabel: 'Name: value' with a bright mono value
+    status          a muted one-line status label
+    sound-mode      the big Sound Mode toggle (its dot is the button's on/off icon)
+    toolbar-button  an icon-only button, outlined on hover, accent when checked (the gear)
 """
 
 import sys
@@ -220,17 +223,6 @@ QToolTip {{
     border: 1px solid {t.BORDER_STRONG}; border-radius: 5px; padding: 4px 8px;
 }}
 
-QGroupBox {{
-    background: {t.CARD}; border: 1px solid {t.BORDER}; border-radius: {t.RADIUS_CARD}px;
-    margin-top: 0px; padding: 22px 10px 6px 10px;
-    font-size: {t.SIZE_SECTION}px; font-weight: 600;   /* the title's font; Qt ignores fonts on ::title */
-}}
-QGroupBox::title {{
-    subcontrol-origin: padding; subcontrol-position: top left;
-    left: 12px; top: 9px; color: {t.ACCENT};
-}}
-QGroupBox QLabel {{ font-size: {t.SIZE_BODY}px; font-weight: normal; }}
-
 QPushButton {{
     background: {t.BUTTON}; color: {t.TEXT};
     border: 1px solid {t.BORDER_STRONG}; border-radius: {t.RADIUS}px;
@@ -323,6 +315,28 @@ QLabel[role="tile"][tone="low"]  {{ border-color: {mix(t.LOW_BAND, t.TILE_BORDER
 QLabel[role="tile"][tone="high"] {{ border-color: {mix(t.HIGH_BAND, t.TILE_BORDER, 0.35)}; }}
 
 QLabel[role="value"] {{ background: transparent; }}
+QLabel[role="status"] {{ color: {t.TEXT_MUTED}; font-size: {t.SIZE_LABEL}px; }}
+
+QPushButton[role="sound-mode"] {{
+    background: {t.CARD}; color: {t.TEXT_DIM};
+    border: 1px solid {t.BORDER_STRONG}; border-radius: {t.RADIUS_CARD}px;
+    font-size: {t.SIZE_TITLE}px; font-weight: 600; padding: 0 12px;
+}}
+QPushButton[role="sound-mode"]:hover {{ border-color: {t.HOVER_EDGE}; }}
+QPushButton[role="sound-mode"]:checked {{
+    background: {mix(t.OK, t.BG, 0.09)}; color: {mix(t.OK, '#ffffff', 0.5)};
+    border-color: {mix(t.OK, t.BG, 0.55)};
+}}
+QPushButton[role="sound-mode"]:checked:hover {{ border-color: {t.OK}; }}
+
+QPushButton[role="toolbar-button"] {{
+    background: transparent; color: {t.TEXT_DIM}; font-size: 17px;
+    border: 1px solid transparent; border-radius: {t.RADIUS}px; padding: 0;
+}}
+QPushButton[role="toolbar-button"]:hover {{ background: {t.BUTTON}; border-color: {t.BORDER_STRONG}; }}
+QPushButton[role="toolbar-button"]:checked {{
+    background: {mix(t.ACCENT, t.BG, 0.14)}; border-color: {t.ACCENT}; color: {t.ACCENT};
+}}
 '''
 
 

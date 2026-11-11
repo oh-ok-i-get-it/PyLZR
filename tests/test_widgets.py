@@ -69,6 +69,6 @@ def test_card_puts_content_in_its_body(qapp):
 
 def test_every_role_has_rules():
     rules = style.role_rules()
-    for role in ('section', 'card', 'tile', 'value'):
+    for role in ('section', 'card', 'tile', 'value', 'status', 'sound-mode', 'toolbar-button'):
         assert f'[role="{role}"]' in rules, role
     assert rules in style.stylesheet()

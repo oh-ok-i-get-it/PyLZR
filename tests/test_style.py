@@ -59,7 +59,7 @@ def test_stylesheet_is_built_from_theme_tokens():
     for token in (theme.CARD, theme.RAISED, theme.BUTTON, theme.BORDER, theme.BORDER_STRONG,
                   theme.GROOVE, theme.TEXT, theme.ACCENT, theme.MONO_FONT):   # UI_FONT is set by app.setFont()
         assert token in sheet, token
-    for widget in ('QGroupBox', 'QPushButton', 'QSlider', 'QComboBox', 'QLineEdit', 'QSpinBox',
+    for widget in ('QPushButton', 'QSlider', 'QComboBox', 'QLineEdit', 'QSpinBox',
                    'QTextEdit', 'QScrollBar', 'QMenu', 'QToolTip'):
         assert widget + ' ' in sheet or widget + ':' in sheet or widget + ',' in sheet, widget
 
