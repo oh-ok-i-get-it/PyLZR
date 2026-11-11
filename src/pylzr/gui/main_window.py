@@ -10,7 +10,7 @@ from ..core.output_switch import OutputSwitch
 from ..engine   import AudioEngine
 from ..midi     import MIDIOutput, KeyboardMapper
 from ..dmx      import DMXOutput, NodeDiscovery, PortAddress, node_choices
-from .                import style
+from .                import style, theme
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
 from .settings_panel  import SettingsPanel
@@ -65,10 +65,13 @@ class MainWindow(QWidget):
         self.avg_panel       = AvgPanel()
 
         bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(theme.GAP)
         bottom_row.addWidget(self.log_panel, stretch=3)
         bottom_row.addWidget(self.avg_panel, stretch=1)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(theme.MARGIN, theme.MARGIN, theme.MARGIN, theme.MARGIN)
+        layout.setSpacing(theme.GAP)
         layout.addWidget(self.controls)
         layout.addWidget(self.spectrum_widget)
         layout.addLayout(bottom_row)

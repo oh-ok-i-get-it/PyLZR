@@ -41,16 +41,17 @@ class ControlPanel(QWidget):
 
     def _build(self):
         root = QVBoxLayout()
-        root.setContentsMargins(4, 4, 4, 4)
-        root.setSpacing(4)
+        root.setContentsMargins(0, 0, 0, 0)     # the main window sets the outer margin
+        root.setSpacing(theme.GAP)
 
         # ── Top row: avg-rate slider | sound mode button | mode displays ─
         top_row = QHBoxLayout()
-        top_row.setSpacing(8)
+        top_row.setSpacing(theme.GAP)
 
         # Avg-rate slider (compact fixed width), value beside it
         rate_card = Card('AVGS CALC RATE', body=QHBoxLayout(), margins=(12, 9, 12, 9))
         rate_card.setMaximumWidth(200)
+        rate_card.setFixedHeight(theme.TOP_ROW_H)      # sets the top row's height; the rest centre in it
         rate_card.body.setSpacing(8)
         self._count_label = ValueLabel(str(AVG_COUNT_RATE_DEFAULT))
         self._count_slider = QSlider(Qt.Horizontal)
@@ -106,7 +107,7 @@ class ControlPanel(QWidget):
 
         # ── Cutoff row: low (left) | high (right) ────────────────────────
         cutoff_row = QHBoxLayout()
-        cutoff_row.setSpacing(8)
+        cutoff_row.setSpacing(theme.GAP)
 
         for band, title in (('low', 'LOW CUTOFFS'), ('high', 'HIGH CUTOFFS')):
             cutoffs = self._cutoffs[band]
