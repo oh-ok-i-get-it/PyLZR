@@ -10,6 +10,7 @@ and audio (tests/test_architecture.py checks this):
   binding      a fixture type: profile + mode + mappings + patterns, checked for safety
   renderer     a whole attribute state → one fixture's channel values
   patch        which fixtures are at which addresses, and rendering them (Rig)
+  library      every profile and binding (shipped + your folder), your patch and words
   jsonio       strict reading and safe writing of the data files
   errors       FixtureError and friends, naming file and place
 """
@@ -19,6 +20,7 @@ from .attributes import (
 )
 from .binding import Binding, ResolvedBinding, load_binding, read_binding, write_binding
 from .errors import BindingError, FixtureError, PatchError, ProfileError, VocabularyError
+from .library import FixtureLibrary, Problem
 from .mappings import AttributeMapping, Bipolar, Direction, Linear, Options, Selected
 from .ofl import Capability, Channel, Entity, Mode, Profile, load_profile, parse_entity, read_profile
 from .patch import Patch, PatchEntry, PatchProblem, Rig, load_patch, read_patch, write_patch
@@ -33,6 +35,7 @@ __all__ = [
     'CORE', 'CORE_ATTRIBUTES', 'AttrKey', 'Attribute', 'AttributeSet', 'Kind', 'PatternRequest', 'make_extra',
     'Binding', 'ResolvedBinding', 'load_binding', 'read_binding', 'write_binding',
     'BindingError', 'FixtureError', 'PatchError', 'ProfileError', 'VocabularyError',
+    'FixtureLibrary', 'Problem',
     'AttributeMapping', 'Bipolar', 'Direction', 'Linear', 'Options', 'Selected',
     'Patch', 'PatchEntry', 'PatchProblem', 'Rig', 'load_patch', 'read_patch', 'write_patch',
     'PatternEntry', 'PatternLibrary', 'PatternMapping',
