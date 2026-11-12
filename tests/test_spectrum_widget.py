@@ -65,3 +65,21 @@ def test_waveform_is_scaled_to_0_255(widget):
     widget.update_waveform(chunk)
     x, y = widget._waveform_line.getData()
     assert list(y[:3]) == [0, 128, 255] and len(x) == 2048
+
+
+def tick_labels(plot, name):
+    return [label for _value, label in plot.getAxis(name)._tickLevels[0]]
+
+
+def test_spectrum_axes_label_both_ends(widget):
+    """The last frequency label sits inside the axis (pyqtgraph hides one that
+    would overhang it), and the bottom of the level scale reads 1e-4."""
+    assert tick_labels(widget.spectrum, 'bottom')[-1] == '20kHz'
+    assert tick_labels(widget.spectrum, 'left') == ['1', '0.1', '0.01', '0.001', '1e-4']
+
+
+def test_curves_are_thicker_and_drawn_as_segments(widget):
+    from pylzr.gui.spectrum_widget import _LINE_W
+    for item in (widget._waveform_line, *widget._spectrum_lines):
+        assert item.opts['pen'].widthF() == _LINE_W > 1
+        assert item.curve.opts['segmentedLineMode'] == 'on'     # wide antialiased polylines are slow
