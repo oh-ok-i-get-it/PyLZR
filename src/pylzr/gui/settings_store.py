@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from PyQt5.QtCore import QSettings
 
 from ..core import (
@@ -56,6 +58,12 @@ class SettingsStore:
     @property
     def path(self) -> str:
         return self._qs.fileName()
+
+    @property
+    def fixtures_folder(self) -> Path:
+        """Your fixtures folder (patch, profiles, bindings), next to the .ini file.
+        Clearing the settings leaves it alone."""
+        return Path(self.path).parent / 'fixtures'
 
     def get(self, key: str):
         default = DEFAULTS[key]

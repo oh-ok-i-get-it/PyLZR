@@ -11,18 +11,20 @@ text inside a label).
 - IndicatorTile   'LOW\\n2' as a small label over a big number
 - ValueLabel      'Quiet: 1200' as a dim name and a bright mono value
 - ElidedComboBox  a dropdown that ends a name too long for it with '…' (full name in the tooltip)
+- ElidedLabel     one line of text that ends in '…' when it doesn't fit (full text in the tooltip)
+- ProblemLine     an amber warning triangle and a one-line message, e.g. what's wrong with a fixture
 """
 
 import html
 
-from PyQt5.QtCore import QEvent, Qt
+from PyQt5.QtCore import QEvent, QSize, Qt
 from PyQt5.QtGui import QFont, QPalette
 from PyQt5.QtWidgets import (
-    QBoxLayout, QComboBox, QFrame, QLabel, QLayout, QStyle, QStyleOptionComboBox, QStylePainter, QToolTip,
-    QVBoxLayout, QWidget,
+    QBoxLayout, QComboBox, QFrame, QHBoxLayout, QLabel, QLayout, QSizePolicy, QStyle, QStyleOptionComboBox,
+    QStylePainter, QToolTip, QVBoxLayout, QWidget,
 )
 
-from . import theme
+from . import style, theme
 
 # Indicator tile tones: the colour of the number (the edge tint is in gui/style.py)
 TILE_TONES = {'neutral': theme.TEXT_DIM, 'low': theme.LOW_BAND, 'high': theme.HIGH_BAND}
@@ -216,3 +218,74 @@ class ElidedComboBox(QComboBox):
             QToolTip.showText(event.globalPos(), self.full_text(), self)
             return True
         return super().event(event)
+
+
+class ElidedLabel(QLabel):
+    """One line of text that ends in '…' when it doesn't fit the label's
+    width. text() and the tooltip give the full text; shown_text() what is
+    drawn. A long text never makes the label (or its row) wider."""
+
+    def __init__(self, text: str = '', parent: QWidget | None = None):
+        super().__init__(parent)
+        self._full = ''
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.setText(text)
+
+    def setText(self, text: str) -> None:
+        self._full = text
+        self.setToolTip(text)
+        self._elide()
+
+    def text(self) -> str:
+        return self._full
+
+    def shown_text(self) -> str:
+        return super().text()
+
+    def _elide(self) -> None:
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideRight, self.contentsRect().width()))
+
+    def sizeHint(self) -> QSize:
+        return QSize(self.fontMetrics().horizontalAdvance(self._full) + 2, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange):   # e.g. the stylesheet's font size arrived
+            self._elide()
+
+
+class ProblemLine(QWidget):
+    """An amber warning triangle and a one-line message (style role
+    'problem'); a message too long for the line ends in '…', with the full
+    text in its tooltip."""
+
+    ICON_SIZE = 12
+
+    def __init__(self, text: str = '', parent: QWidget | None = None):
+        super().__init__(parent)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(5)
+        self.icon = QLabel()
+        self.icon.setFixedSize(self.ICON_SIZE, self.ICON_SIZE)
+        pixmap = style.icon('triangle-alert', theme.WARN, size=self.ICON_SIZE).pixmap(
+            QSize(self.ICON_SIZE, self.ICON_SIZE))
+        if not pixmap.isNull():
+            self.icon.setPixmap(pixmap)
+        self.label = ElidedLabel(text)
+        set_role(self.label, 'problem')
+        row.addWidget(self.icon)
+        row.addWidget(self.label, stretch=1)
+
+    def setText(self, text: str) -> None:
+        self.label.setText(text)
+
+    def text(self) -> str:
+        return self.label.text()

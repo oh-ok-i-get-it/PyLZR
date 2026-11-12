@@ -3,25 +3,10 @@ plot colours. apply() changes the shared QApplication, so the fixture puts
 everything back afterwards and other tests keep running unstyled."""
 
 import pyqtgraph as pg
-import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFontDatabase, QPalette
 
 from pylzr.gui import style, theme
-
-
-@pytest.fixture
-def styled_app(qapp):
-    saved = (qapp.style().objectName(), qapp.palette(), qapp.font(), qapp.styleSheet(),
-             pg.getConfigOption('background'), pg.getConfigOption('foreground'))
-    style.apply(qapp)
-    yield qapp
-    name, palette, font, sheet, background, foreground = saved
-    qapp.setStyleSheet(sheet)
-    qapp.setStyle(name)
-    qapp.setPalette(palette)
-    qapp.setFont(font)
-    pg.setConfigOptions(background=background, foreground=foreground)
 
 
 def test_bundled_fonts_load(qapp):

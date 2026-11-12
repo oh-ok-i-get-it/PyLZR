@@ -148,6 +148,15 @@ class Patch:
             address = max(clash) + 1
         return None
 
+    def next_name(self, base: str = 'Laser') -> str:
+        """'<base> N' with the lowest N (from 1) no fixture is called, ignoring
+        case: a name to suggest for a new fixture."""
+        taken = {name.casefold() for name in self.names}
+        n = 1
+        while f'{base} {n}'.casefold() in taken:
+            n += 1
+        return f'{base} {n}'
+
     # ── patch.json ──────────────────────────────────────────────────────
 
     def to_json(self) -> dict:

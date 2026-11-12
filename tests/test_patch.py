@@ -138,6 +138,19 @@ def test_next_free_address(entries, footprint, expected):
     assert patch(*entries).next_free_address(footprint, FOOTPRINTS) == expected
 
 
+@pytest.mark.parametrize('names, expected', [
+    ([], 'Laser 1'),
+    (['Laser 1'], 'Laser 2'),
+    (['Laser 2'], 'Laser 1'),                                               # the lowest free number
+    (['Laser 1', 'Laser 2', 'Laser 4'], 'Laser 3'),
+    (['laser 1'], 'Laser 2'),                                               # ignoring case
+    (['Laser L', 'Laser R'], 'Laser 1'),
+])
+def test_next_name(names, expected):
+    assert patch(*((name, GRUOLIN, 1 + 36 * i) for i, name in enumerate(names))).next_name() == expected
+    assert Patch().next_name('Beam') == 'Beam 1'
+
+
 # ── Rendering through a rig ──────────────────────────────────────────────
 
 def rig(p=None):

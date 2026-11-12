@@ -41,6 +41,25 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
+@pytest.fixture
+def styled_app(qapp):
+    """The app with PyLZR's real look (fonts, palette, stylesheet), put back
+    afterwards so other tests keep running unstyled."""
+    import pyqtgraph as pg
+
+    from pylzr.gui import style
+    saved = (qapp.style().objectName(), qapp.palette(), qapp.font(), qapp.styleSheet(),
+             pg.getConfigOption('background'), pg.getConfigOption('foreground'))
+    style.apply(qapp)
+    yield qapp
+    name, palette, font, sheet, background, foreground = saved
+    qapp.setStyleSheet(sheet)
+    qapp.setStyle(name)
+    qapp.setPalette(palette)
+    qapp.setFont(font)
+    pg.setConfigOptions(background=background, foreground=foreground)
+
+
 @pytest.fixture(autouse=True)
 def _fresh_state(tmp_path):
     """Every test starts on a simulated macOS with default devices and no

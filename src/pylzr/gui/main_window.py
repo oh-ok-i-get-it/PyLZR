@@ -2,7 +2,8 @@ import logging
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtCore import Qt, QPoint, QUrl
+from PyQt5.QtGui import QDesktopServices
 
 from ..core import CONTROL_MODES, WINDOW_W, WINDOW_H
 from ..core.app_logger import LOGGER_NAME, Tone, get_logger
@@ -10,6 +11,7 @@ from ..core.output_switch import OutputSwitch
 from ..engine   import AudioEngine
 from ..midi     import MIDIOutput, KeyboardMapper
 from ..dmx      import DMXOutput, NodeDiscovery, PortAddress, node_choices
+from ..fixtures import FixtureLibrary, Patch
 from .                import style, theme
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
@@ -29,9 +31,14 @@ class MainWindow(QWidget):
     output chosen by Control Mode: MIDI, or DMX (Art-Net). The DMX output
     only sends while DMX is chosen.
 
+    The fixture library (your patch, profiles and bindings, from the
+    fixtures folder next to the settings file) is shown in Settings → DMX,
+    re-read each time Settings opens, and the patch is saved on every edit.
+
     This class only connects things — the pipeline lives in engine.py and
-    the audio/, analysis/, midi/ and dmx/ packages. User settings are
-    restored from the SettingsStore at startup and saved whenever they change.
+    the audio/, analysis/, midi/, dmx/ and fixtures/ packages. User settings
+    are restored from the SettingsStore at startup and saved whenever they
+    change.
     """
 
     def __init__(self):
@@ -45,6 +52,8 @@ class MainWindow(QWidget):
         logging.getLogger(LOGGER_NAME).addHandler(self.log_panel.log_handler)
 
         self.store = SettingsStore()
+        self.library = FixtureLibrary(self.store.fixtures_folder)
+        self._logged_fixture_problems: set[str] = set()     # each file problem is logged once per run
 
         # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
@@ -85,6 +94,7 @@ class MainWindow(QWidget):
         self._show_audio_device(ok=True)
         self._refresh_midi_ports()
         self.settings_panel.set_dmx_status()
+        self._show_fixtures()
 
         # Engine → displays
         engine = self.engine
@@ -117,6 +127,8 @@ class MainWindow(QWidget):
         self.settings_panel.dmx.node_changed.connect(self._on_dmx_node_changed)
         self.settings_panel.dmx.tester_requested.connect(self._open_dmx_tester)
         self.settings_panel.dmx.find_requested.connect(self._find_dmx_nodes)
+        self.settings_panel.dmx.fixtures.patch_edited.connect(self._on_patch_edited)
+        self.settings_panel.dmx.fixtures.open_folder_requested.connect(self._open_fixtures_folder)
 
         # Restore saved settings through the panels (same path as user input),
         # then save every later change
@@ -194,6 +206,8 @@ class MainWindow(QWidget):
         visible = not self.settings_panel.isVisible()
         if visible:
             self._refresh_midi_ports()
+            self.library.reload()                  # picks up files changed by hand
+            self._show_fixtures()
             self._position_settings_panel()
             self.settings_panel.raise_()
         self.settings_panel.setVisible(visible)
@@ -281,6 +295,42 @@ class MainWindow(QWidget):
                         "computer's IP address and the firewall (see README, DMX Output).")
         if self.settings_panel.isVisible():        # closed meanwhile: the log has the results
             self.settings_panel.dmx.show_nodes(choices)
+
+    # ------------------------------------------------------------------
+    # Fixtures
+    # ------------------------------------------------------------------
+
+    def _show_fixtures(self):
+        """Show the library's types, patch and problems in Settings → DMX, and
+        log file problems not logged before."""
+        library, fixtures = self.library, self.settings_panel.dmx.fixtures
+        fixtures.set_types([(key, name, library.renderers[key].footprint) for key, name in library.types()])
+        fixtures.set_patch(library.patch, library.rig().problems)
+        problems = [str(problem) for problem in library.problems]
+        fixtures.set_file_problems(problems)
+        for problem in problems:
+            if problem not in self._logged_fixture_problems:
+                self._logged_fixture_problems.add(problem)
+                log.warning(f'Fixtures: {problem}')
+
+    def _on_patch_edited(self, patch: Patch):
+        try:
+            self.library.save_patch(patch)
+        except OSError as e:
+            log.error(f"Fixtures: couldn't save {self.library.folder / 'patch.json'} ({e.strerror or e})")
+        self._show_fixtures()
+
+    def _open_fixtures_folder(self):
+        folder = self.library.folder
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.error(f"Fixtures: couldn't create {folder} ({e.strerror or e})")
+            return
+        if QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            log.info(f'Fixtures folder: {folder}', extra={'tone': Tone.MUTED})
+        else:
+            log.warning(f"Fixtures: couldn't open {folder}. Open it yourself to add profiles and bindings.")
 
     def _open_dmx_tester(self):
         if self._dmx_tester is None:

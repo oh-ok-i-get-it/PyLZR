@@ -157,7 +157,8 @@ class SettingsPanel(QWidget):
         root.addWidget(_divider(QFrame.HLine))
         root.addWidget(self._build_columns())
         root.addWidget(_divider(QFrame.HLine))
-        self.dmx = DMXSettings()             # DMX (ART-NET): node address, tester
+        self.dmx = DMXSettings()             # DMX (ART-NET): node address, tester, fixtures
+        self.dmx.fixtures.size_changed.connect(self._refit)   # floats with no layout slot: re-fit by hand
         root.addWidget(self.dmx)
         root.addWidget(_divider(QFrame.HLine))
         root.addWidget(self._build_performance())
@@ -380,6 +381,17 @@ class SettingsPanel(QWidget):
                 signal.emit(combo.itemData(row))
         combo.currentIndexChanged.connect(forward)
         return combo
+
+    def _refit(self):
+        """Resize to the content after the fixtures list grew or shrank. The
+        layouts between the list and the panel only notice on the next event
+        loop pass (they cache their children's sizes), so each widget on the
+        way up is told now, and the size is right straight away."""
+        widget = self.dmx.fixtures
+        while widget is not None and widget is not self:
+            widget.updateGeometry()                  # drops the cached size in its parent's layout
+            widget = widget.parentWidget()
+        self.adjustSize()
 
     # ── Public setters ────────────────────────────────────────────────────
 
