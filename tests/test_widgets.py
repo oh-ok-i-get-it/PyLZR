@@ -4,7 +4,9 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QHBoxLayout, QLabel
 
 from pylzr.gui import panel_style, style, theme
-from pylzr.gui.widgets import Card, IndicatorTile, PlainTextLabel, SectionTitle, ValueLabel, set_props
+from pylzr.gui.widgets import (
+    Card, ElidedComboBox, IndicatorTile, PlainTextLabel, SectionTitle, ValueLabel, set_props,
+)
 
 
 def shown(label: QLabel) -> str:
@@ -83,3 +85,26 @@ def test_set_props_changes_only_what_differs(qapp):
     set_props(label, state='on')
     assert label.property('state') == 'on'
     assert panel_style.label('Gain').property('role') == 'label'
+
+
+def test_elided_combo_shortens_only_what_does_not_fit(qapp):
+    from PyQt5.QtCore import Qt
+    combo = ElidedComboBox()
+    combo.addItem('Focusrite USB Audio (Scarlett 2i2 4th Gen)')
+    combo.setItemData(0, 'Focusrite USB Audio (Scarlett 2i2 4th Gen) — full', Qt.ToolTipRole)
+    combo.addItem('Mic')
+    combo.setFixedWidth(150)
+    combo.show()
+    assert combo.shown_text().endswith('…') and len(combo.shown_text()) < len(combo.currentText())
+    assert combo.full_text().endswith('— full')                # the tooltip names it in full
+    combo.setCurrentIndex(1)
+    assert combo.shown_text() == 'Mic' == combo.full_text()   # fits: shown as is
+    assert combo.sizeHint().width() < 150                     # a long name doesn't ask for more room
+
+
+def test_elided_combo_shows_its_placeholder(qapp):
+    combo = ElidedComboBox()
+    combo.setPlaceholderText('No devices found')
+    combo.setFixedWidth(200)
+    combo.show()
+    assert combo.currentIndex() == -1 and combo.shown_text() == 'No devices found'

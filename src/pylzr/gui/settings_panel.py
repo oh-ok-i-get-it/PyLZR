@@ -8,7 +8,7 @@ from ..core import CONTROL_MODES
 from . import style, theme
 from .dmx_settings import DMXSettings
 from .panel_style import label, pad, section
-from .widgets import set_props, set_role
+from .widgets import ElidedComboBox, set_props, set_role
 
 _W = 560  # panel width — wide enough for 3 columns
 
@@ -77,13 +77,15 @@ def _fill_combo(combo: QComboBox, items: list[tuple[str, object]],
     """Replace combo items without emitting signals.
 
     items are (label, value) pairs; each value is stored on its item and read
-    back with combo.itemData(). Long labels are truncated for display. Selects
+    back with combo.itemData(). Labels over 32 characters are cut to keep the
+    open list a sensible width; the full label is the item's tooltip. Selects
     the item whose value == current, else fallback_row (-1 = none).
     """
     combo.blockSignals(True)
     combo.clear()
     for text, value in items:
         combo.addItem(text if len(text) <= 32 else text[:30] + '…', value)
+        combo.setItemData(combo.count() - 1, text, Qt.ToolTipRole)
     row = combo.findData(current) if current is not None else -1
     combo.setCurrentIndex(row if row >= 0 else fallback_row)
     combo.blockSignals(False)
@@ -368,8 +370,8 @@ class SettingsPanel(QWidget):
     @staticmethod
     def _dropdown(signal, items: list[tuple[str, object]] = (), placeholder: str = '') -> QComboBox:
         """Styled combo of (label, value) items that emits signal(value) when
-        the user picks an item."""
-        combo = QComboBox()
+        the user picks an item. Names too long to show end in '…'."""
+        combo = ElidedComboBox()
         combo.setPlaceholderText(placeholder)
         _fill_combo(combo, list(items), fallback_row=0)
 

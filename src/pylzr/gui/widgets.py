@@ -10,13 +10,17 @@ text inside a label).
 - PlainTextLabel  shows formatted text but text() returns the plain text it was given
 - IndicatorTile   'LOW\\n2' as a small label over a big number
 - ValueLabel      'Quiet: 1200' as a dim name and a bright mono value
+- ElidedComboBox  a dropdown that ends a name too long for it with '…' (full name in the tooltip)
 """
 
 import html
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QBoxLayout, QFrame, QLabel, QLayout, QVBoxLayout, QWidget
+from PyQt5.QtCore import QEvent, Qt
+from PyQt5.QtGui import QFont, QPalette
+from PyQt5.QtWidgets import (
+    QBoxLayout, QComboBox, QFrame, QLabel, QLayout, QStyle, QStyleOptionComboBox, QStylePainter, QToolTip,
+    QVBoxLayout, QWidget,
+)
 
 from . import theme
 
@@ -167,3 +171,47 @@ class ValueLabel(PlainTextLabel):
         if not name:
             return shown
         return _span(f'{name}:', color=theme.TEXT_DIM, size=theme.SIZE_LABEL, family=theme.UI_FONT) + ' ' + shown
+
+
+class ElidedComboBox(QComboBox):
+    """A dropdown whose shown name ends in '…' when it doesn't fit, instead of
+    being cut off. A long name can't widen the dropdown (and its column); the
+    open list still shows names in full. Hovering a shortened name shows the
+    item's tooltip (Qt.ToolTipRole) or its text; otherwise the dropdown's own
+    tooltip shows as usual."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(8)
+
+    def _option(self) -> QStyleOptionComboBox:
+        opt = QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        if self.currentIndex() < 0 and self.placeholderText():   # QComboBox's own paintEvent does this
+            opt.currentText = self.placeholderText()
+            opt.palette.setBrush(QPalette.ButtonText, opt.palette.placeholderText())
+        return opt
+
+    def shown_text(self) -> str:
+        """The current name as drawn: elided to the width of the text field."""
+        opt = self._option()
+        field = self.style().subControlRect(QStyle.CC_ComboBox, opt, QStyle.SC_ComboBoxEditField, self)
+        return self.fontMetrics().elidedText(opt.currentText, Qt.ElideRight, field.width())
+
+    def full_text(self) -> str:
+        """The current item's tooltip (its full name), else its text."""
+        return self.currentData(Qt.ToolTipRole) or self.currentText()
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        opt = self._option()
+        painter.drawComplexControl(QStyle.CC_ComboBox, opt)
+        opt.currentText = self.shown_text()
+        painter.drawControl(QStyle.CE_ComboBoxLabel, opt)
+
+    def event(self, event):
+        if event.type() == QEvent.ToolTip and self.shown_text() != self.full_text():
+            QToolTip.showText(event.globalPos(), self.full_text(), self)
+            return True
+        return super().event(event)
