@@ -11,6 +11,7 @@ building blocks from gui/widgets.py over per-widget stylesheets:
     card            Card: rounded panel on the window background
     tile            IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
     value           ValueLabel: 'Name: value' with a bright mono value
+    log             a read-only text box sitting borderless on a card (Console, Averages)
     status          a muted one-line status label
     sound-mode      the big Sound Mode toggle (its dot is the button's on/off icon)
     toolbar-button  an icon-only button, outlined on hover, accent when checked (the gear)
@@ -315,6 +316,7 @@ QLabel[role="tile"][tone="low"]  {{ border-color: {mix(t.LOW_BAND, t.TILE_BORDER
 QLabel[role="tile"][tone="high"] {{ border-color: {mix(t.HIGH_BAND, t.TILE_BORDER, 0.35)}; }}
 
 QLabel[role="value"] {{ background: transparent; }}
+QTextEdit[role="log"] {{ background: transparent; border: none; }}
 QLabel[role="status"] {{ color: {t.TEXT_MUTED}; font-size: {t.SIZE_LABEL}px; }}
 
 QPushButton[role="sound-mode"] {{

@@ -20,3 +20,11 @@ def test_averages_panel_keeps_most_recent_rows(qapp):
     # newest last; plain text collapses the HTML padding, so compare tokens
     assert lines[0].split() == ['L', '5.0000', 'H', '50.0000']
     assert lines[-1].split()[:2] == ['L', f'{_AVG_ROWS + 4}.0000']
+
+
+def test_panels_are_cards_with_dim_titles(qapp):
+    from pylzr.gui.widgets import Card
+    for panel, title in ((LogPanel(), 'CONSOLE'), (AvgPanel(), 'AVERAGES')):
+        assert isinstance(panel, Card)
+        assert panel.title.text() == title and panel.title.property('tone') == 'dim'
+        assert panel._text.height() == 130 and panel._text.property('role') == 'log'

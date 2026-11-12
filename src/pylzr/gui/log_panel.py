@@ -1,22 +1,15 @@
 import logging
 from collections import deque
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit
-from PyQt5.QtCore import Qt, QObject, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import QTextEdit
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextBlockFormat, QTextCursor
 from . import theme
+from .widgets import Card, set_role
 from ..core.app_logger import DATE_FORMAT, LEVELS, LOG_FORMAT, tone_of
 
-# Each panel is a card (title + text); the text box itself is borderless on it
-_CARD_OBJECT = 'LogCard'
-_CARD_STYLE  = (
-    f'#{_CARD_OBJECT} {{ background: {theme.CARD}; border: 1px solid {theme.BORDER};'
-    f' border-radius: {theme.RADIUS_CARD}px; }}'
-)
-_TITLE_STYLE = (
-    f'color: {theme.TEXT_DIM}; font-size: {theme.SIZE_SECTION}px; font-weight: 600; background: transparent;'
-)
-_TEXT_STYLE  = 'QTextEdit {{ background: transparent; color: {fg}; border: none; }}'
-_DEFAULT_FG  = theme.TEXT
+# Each panel is a card (dim title + text); the text box itself is borderless on it
+_CARD_MARGINS = (10, 9, 6, 6)   # tight on the right / bottom, where the scroll bars sit
+_DEFAULT_FG   = theme.TEXT
 
 _MAX_LOG_LINES = 2000   # oldest console lines are dropped beyond this
 _AVG_ROWS      = 10
@@ -48,31 +41,16 @@ class _LogHandler(logging.Handler):
 
 def _base_text_widget(height: int) -> QTextEdit:
     t = QTextEdit()
+    set_role(t, 'log')
     t.setReadOnly(True)
     t.setFixedHeight(height)
     t.setLineWrapMode(QTextEdit.NoWrap)
-    t.setStyleSheet(_TEXT_STYLE.format(fg=_DEFAULT_FG))
     doc = t.document()
     doc.setDocumentMargin(2)
     return t
 
 
-def _card(panel: QWidget, title: str, text: QTextEdit) -> None:
-    """Lay out `panel` as a card: small-caps title above its text box."""
-    panel.setObjectName(_CARD_OBJECT)
-    panel.setAttribute(Qt.WA_StyledBackground, True)
-    panel.setStyleSheet(_CARD_STYLE)
-    heading = QLabel(title)
-    heading.setStyleSheet(_TITLE_STYLE)
-    layout = QVBoxLayout()
-    layout.setContentsMargins(10, 9, 6, 6)
-    layout.setSpacing(5)
-    layout.addWidget(heading)
-    layout.addWidget(text)
-    panel.setLayout(layout)
-
-
-class LogPanel(QWidget):
+class LogPanel(Card):
     """In-app console for the app's log.
 
     Attach `log_handler` to the 'pylzr' logger to show its records here;
@@ -80,10 +58,10 @@ class LogPanel(QWidget):
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__('CONSOLE', tone='dim', margins=_CARD_MARGINS, parent=parent)
         self._text = _base_text_widget(130)
         self._text.document().setMaximumBlockCount(_MAX_LOG_LINES)
-        _card(self, 'CONSOLE', self._text)
+        self.addWidget(self._text)
 
         self.log_handler = _LogHandler()
         self.log_handler.bridge.formatted.connect(self.append_message)
@@ -111,14 +89,14 @@ class LogPanel(QWidget):
         self._text.ensureCursorVisible()
 
 
-class AvgPanel(QWidget):
+class AvgPanel(Card):
     """Scrolling display of the _AVG_ROWS most recent low/high windowed averages."""
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__('AVERAGES', tone='dim', margins=_CARD_MARGINS, parent=parent)
         self._entries: deque[tuple[float, float]] = deque(maxlen=_AVG_ROWS)
         self._text = _base_text_widget(130)
-        _card(self, 'AVERAGES', self._text)
+        self.addWidget(self._text)
 
     def append_avgs(self, low_avg: float, high_avg: float):
         self._entries.append((low_avg, high_avg))
