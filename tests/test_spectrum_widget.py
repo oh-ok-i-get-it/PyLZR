@@ -24,7 +24,9 @@ def spectrum(value):
 def test_draws_every_bin_but_dc_against_its_frequency(widget):
     """Each band line after the first also starts at the previous band's last
     bin (so the drawn line has no gaps); without those shared points the
-    lines are exactly bins 1..1024."""
+    lines are exactly bins 1..1024. (Gentle smoothing off: it would change
+    the values.)"""
+    widget = SpectrumWidget(BandLayout(2048, 44100), gentle=False)
     widget.update_spectrum(np.arange(1025, dtype=float))
     xs = [line.getOriginalDataset()[0] for line in widget._spectrum_lines]
     ys = shown(widget)
@@ -83,3 +85,34 @@ def test_curves_are_thicker_and_drawn_as_segments(widget):
     for item in (widget._waveform_line, *widget._spectrum_lines):
         assert item.opts['pen'].widthF() == _LINE_W > 1
         assert item.curve.opts['segmentedLineMode'] == 'on'     # wide antialiased polylines are slow
+
+
+def softened(*frames):
+    """What _soften shows (as levels, not log10) after each frame in turn."""
+    from pylzr.gui.spectrum_widget import _soften, _windows
+    windows, held = _windows(BandLayout(2048, 44100).freqs), None
+    for frame in frames:
+        held = _soften(frame, windows, held)
+    return 10.0 ** held
+
+
+def test_gentle_smoothing_keeps_a_flat_spectrum():
+    np.testing.assert_allclose(softened(spectrum(0.01)), 0.01)
+
+
+def test_gentle_smoothing_spreads_a_high_spike_but_leaves_low_bins():
+    frame = spectrum(1e-3)
+    frame[900] = 1e-1                     # ~19.4 kHz: bins are dense on the log axis here
+    frame[5] = 1e-1                       # ~108 Hz: bins are far apart, no neighbours in reach
+    shown = softened(frame)
+    assert 1e-3 < shown[900] < 1e-2       # lowered…
+    assert shown[899] > 1e-3 < shown[901]  # …and spread to its neighbours
+    assert shown[5] == pytest.approx(1e-1)
+    assert shown[4] == pytest.approx(1e-3) == shown[6]
+
+
+def test_gentle_smoothing_rises_at_once_and_falls_gradually():
+    from pylzr.gui.spectrum_widget import _FALL_PER_FRAME
+    assert softened(spectrum(1e-3), spectrum(1e-1))[10] == pytest.approx(1e-1)
+    fallen = softened(spectrum(1e-1), spectrum(1e-3))[10]
+    assert fallen == pytest.approx(10 ** (-1 - _FALL_PER_FRAME))

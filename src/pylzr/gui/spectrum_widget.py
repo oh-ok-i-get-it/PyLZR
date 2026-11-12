@@ -15,6 +15,11 @@ _LINE_W       = 1.5                                  # waveform and spectrum cur
 _FILLED       = (theme.LOW_BAND, theme.HIGH_BAND)   # the analysed bands get a fill that fades downwards
 _FILL_TOP_ALPHA = 0.22                               # at the top of the plot; 0 turns the fill off
 _SPEC_Y       = (-4, 0)                              # spectrum view, log10 units: 1e-4 … 1
+
+# Gentle display smoothing (see _soften), in log10 units like the plot
+_SMOOTH_OCTAVE = 1 / 48    # each bin averaged with its neighbours within ± this many octaves
+_FALL_PER_FRAME = 0.05     # how far a level may drop per frame, in decades (rises are instant)
+_FLOOR          = 1e-12    # levels below this count as this (log10 of 0 is -inf)
 _TITLE_TRACKING = 1.5    # px between title letters, like the small-caps titles elsewhere
 _ROW_STRETCH  = (1, 2)   # waveform : spectrum height
 
@@ -32,20 +37,49 @@ def _fade(colour: str) -> QBrush:
     return QBrush(gradient)
 
 
+def _windows(freqs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For every bin, the first and one-past-last bin within ±_SMOOTH_OCTAVE of
+    its frequency. Low bins are far apart on a log axis and get only
+    themselves; dense high bins get a few neighbours on each side."""
+    ratio = 2.0 ** _SMOOTH_OCTAVE
+    return (np.searchsorted(freqs, freqs / ratio, side='left'),
+            np.searchsorted(freqs, freqs * ratio, side='right'))
+
+
+def _soften(spectrum: np.ndarray, windows: tuple[np.ndarray, np.ndarray],
+            previous: np.ndarray | None) -> np.ndarray:
+    """The spectrum as drawn, in log10 units: each bin averaged over its window
+    (log units, so deep dips don't dominate), then held so it falls at most
+    _FALL_PER_FRAME below `previous` (the last result); rises show at once."""
+    levels = np.log10(np.maximum(spectrum, _FLOOR))
+    lo, hi = windows
+    sums = np.concatenate(([0.0], np.cumsum(levels)))
+    levels = (sums[hi] - sums[lo]) / (hi - lo)
+    if previous is not None:
+        levels = np.maximum(levels, previous - _FALL_PER_FRAME)
+    return levels
+
+
 class SpectrumWidget(QWidget):
     """Waveform and log-log spectrum plots.
 
     The spectrum is drawn against each FFT bin's true frequency, coloured by
     band (low gold, mid grey, high purple, as elsewhere in the app); the
-    11–22 kHz range, which is not analysed, is dim grey. set_smoothing()
-    applies an exponential moving average to the displayed spectrum only;
-    the analysis always uses raw data.
+    11–22 kHz range, which is not analysed, is dim grey.
+
+    What is drawn is smoothed for the eye only; the analysis always uses raw
+    data. With `gentle` (the default) neighbouring frequencies are averaged a
+    little and levels fall back gradually (see _soften); set_smoothing() adds
+    an exponential moving average on top.
     """
 
-    def __init__(self, bands: BandLayout):
+    def __init__(self, bands: BandLayout, gentle: bool = True):
         super().__init__()
         self._bands = bands
         self._waveform_x = np.arange(0, 2 * bands.chunk, 2)
+
+        self._windows = _windows(bands.freqs) if gentle else None
+        self._held: np.ndarray | None = None       # last _soften result (log10)
 
         self._smoothing = 0.0
         self._smoothed: np.ndarray | None = None
@@ -156,6 +190,9 @@ class SpectrumWidget(QWidget):
         return drawn
 
     def update_spectrum(self, spectrum: np.ndarray):
+        if self._windows is not None:
+            self._held = _soften(spectrum, self._windows, self._held)
+            spectrum = 10.0 ** self._held
         if self._smoothing > 0.0:
             a = self._smoothing
             if self._smoothed is None:
