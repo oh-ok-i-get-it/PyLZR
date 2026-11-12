@@ -99,3 +99,10 @@ def test_closing_reports_and_reopens_dark(tester, received):
     assert tester.values == [0] * 16
     tester.show()
     assert received[-1] == (1, [0] * 16)
+
+
+def test_header_labels_are_light_and_the_warning_has_its_role(tester):
+    from PyQt5.QtWidgets import QLabel
+    light = [lbl.text() for lbl in tester.findChildren(QLabel) if lbl.property('tone') == 'light']
+    assert light == ['Start channel', 'Channels']
+    assert tester.findChild(QLabel, 'Warning').property('role') == 'warning'

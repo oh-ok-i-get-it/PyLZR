@@ -12,7 +12,7 @@ building blocks from gui/widgets.py over per-widget stylesheets:
     tile            IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
     value           ValueLabel: 'Name: value' with a bright mono value
     log             a read-only text box sitting borderless on a card (Console, Averages)
-    label           a dim control label ('Input Gain'); panel_style.label() makes one
+    label           a control label ('Input Gain'); tone 'dim' (default) or 'light'; panel_style.label() makes one
     detail          a short bright text beside a label (a connection's port or device)
     readout         a bright mono value on its own ('100%', '43 fps')
     input           a compact line edit / spin box (11 px mono)
@@ -21,6 +21,7 @@ building blocks from gui/widgets.py over per-widget stylesheets:
     divider         a 1 px line between sections (a QFrame)
     meter           the signal level bar (a QProgressBar)
     clip            the CLIP badge; state 'on' or 'off' (change it with widgets.set_props)
+    warning         an amber strip with a short caution (the DMX tester's live-output warning)
     status          a muted one-line status label
     sound-mode      the big Sound Mode toggle (its dot is the button's on/off icon)
     toolbar-button  an icon-only button, outlined on hover, accent when checked (the gear)
@@ -328,6 +329,11 @@ QLabel[role="value"] {{ background: transparent; }}
 QTextEdit[role="log"] {{ background: transparent; border: none; }}
 
 QLabel[role="label"]   {{ color: {t.TEXT_DIM}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="label"][tone="light"] {{ color: {t.TEXT}; }}
+QLabel[role="warning"] {{
+    color: {t.WARN}; background: {mix(t.WARN, t.BG, 0.07)}; border: 1px solid {mix(t.WARN, t.BG, 0.25)};
+    border-radius: {t.RADIUS}px; padding: 5px 10px; font-size: {t.SIZE_LABEL}px;
+}}
 QLabel[role="detail"]  {{ color: {t.TEXT}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
 QLabel[role="readout"] {{
     color: {t.TEXT}; font-family: "{t.MONO_FONT}"; font-size: {t.SIZE_LABEL}px; background: transparent;
