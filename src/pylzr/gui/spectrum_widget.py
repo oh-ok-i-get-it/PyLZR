@@ -4,7 +4,7 @@ from PyQt5.QtCore import QPointF, Qt
 from PyQt5.QtGui import QBrush, QColor, QFont, QLinearGradient
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
-from . import theme
+from . import style, theme
 from ..analysis import BandLayout
 
 # Spectrum lines: low, mid, high, top (not analysed). Curves wider than 1 px are
@@ -156,6 +156,7 @@ class SpectrumWidget(QWidget):
                       color=theme.TEXT_DIM, size='8pt', bold=True)
         font = QFont(theme.UI_FONT)
         font.setPixelSize(theme.SIZE_LABEL)
+        font.setWeight(style.text_weight())
         for name in ('left', 'bottom'):
             axis = plot.getAxis(name)
             axis.setPen(pg.mkPen(theme.AXIS_LINE))

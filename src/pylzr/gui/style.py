@@ -181,6 +181,11 @@ def status_dot_icon(off_color: str, on_color: str, size: int = 16) -> QIcon:
     return result
 
 
+def text_weight() -> int:
+    """theme.WEIGHT_TEXT (CSS scale, 100–900) on Qt 5's QFont scale (0–99)."""
+    return {400: QFont.Normal, 500: QFont.Medium, 600: QFont.DemiBold, 700: QFont.Bold}[theme.WEIGHT_TEXT]
+
+
 def load_fonts() -> set[str]:
     """Register the bundled fonts with Qt and return their family names.
     A font that fails to load is skipped; Qt then falls back to the system font."""
@@ -401,6 +406,7 @@ def apply(app: QApplication) -> None:
     if theme.UI_FONT in families:
         font = QFont(theme.UI_FONT)
         font.setPixelSize(theme.SIZE_BODY)
+        font.setWeight(text_weight())       # rules that set only size or family keep this weight
         app.setFont(font)
     app.setStyleSheet(stylesheet())
     pg.setConfigOptions(background=theme.BG, foreground=theme.AXIS)

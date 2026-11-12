@@ -40,6 +40,8 @@ TOP_BAND      = '#3a3a3a'   # spectrum above the high band (shown, not analysed)
 # Fonts (bundled in gui/assets/fonts) and pixel sizes
 UI_FONT   = 'Inter'
 MONO_FONT = 'JetBrains Mono'
+WEIGHT_TEXT = 500  # labels, values, buttons, console: Medium (Regular reads too thin on black);
+                   # titles, tiles and badges set their own heavier weights
 SIZE_SECTION = 10   # small-caps section titles
 SIZE_LABEL   = 11   # labels, status line, console
 SIZE_BODY    = 12   # default text, buttons, inputs

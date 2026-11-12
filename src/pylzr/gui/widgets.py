@@ -126,7 +126,8 @@ class PlainTextLabel(QLabel):
         return html.escape(plain).replace('\n', '<br>')
 
 
-def _span(text: str, *, color: str, size: int, family: str, weight: int = 400, tracking: float = 0) -> str:
+def _span(text: str, *, color: str, size: int, family: str, weight: int = theme.WEIGHT_TEXT,
+          tracking: float = 0) -> str:
     spacing = f' letter-spacing:{tracking}px;' if tracking else ''
     return (f'<span style="color:{color}; font-size:{size}px; font-family:\'{family}\';'
             f' font-weight:{weight};{spacing}">{html.escape(text)}</span>')

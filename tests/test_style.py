@@ -141,3 +141,13 @@ def test_colours_live_in_theme():
              for path in gui.glob('*.py') if path.name != 'theme.py'
              for match in hex_colour.findall(path.read_text(encoding='utf-8'))}
     assert found == set()
+
+
+def test_text_is_medium_weight_in_both_fonts(styled_app):
+    """Body text is Medium (titles set their own weights), and both bundled
+    families really have a Medium face, so nothing is faked or falls back."""
+    from PyQt5.QtGui import QFont
+    assert styled_app.font().weight() == style.text_weight() == QFont.Medium
+    db = QFontDatabase()
+    for family in (theme.UI_FONT, theme.MONO_FONT):
+        assert 'Medium' in db.styles(family), family
