@@ -12,6 +12,15 @@ building blocks from gui/widgets.py over per-widget stylesheets:
     tile            IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
     value           ValueLabel: 'Name: value' with a bright mono value
     log             a read-only text box sitting borderless on a card (Console, Averages)
+    label           a dim control label ('Input Gain'); panel_style.label() makes one
+    detail          a short bright text beside a label (a connection's port or device)
+    readout         a bright mono value on its own ('100%', '43 fps')
+    input           a compact line edit / spin box (11 px mono)
+    small-button    a compact 22 px button, green when checked; shape 'icon' for icon-only
+    popover         a floating panel: card colour with an accent stripe on top (Settings)
+    divider         a 1 px line between sections (a QFrame)
+    meter           the signal level bar (a QProgressBar)
+    clip            the CLIP badge; state 'on' or 'off' (change it with widgets.set_props)
     status          a muted one-line status label
     sound-mode      the big Sound Mode toggle (its dot is the button's on/off icon)
     toolbar-button  an icon-only button, outlined on hover, accent when checked (the gear)
@@ -317,6 +326,41 @@ QLabel[role="tile"][tone="high"] {{ border-color: {mix(t.HIGH_BAND, t.TILE_BORDE
 
 QLabel[role="value"] {{ background: transparent; }}
 QTextEdit[role="log"] {{ background: transparent; border: none; }}
+
+QLabel[role="label"]   {{ color: {t.TEXT_DIM}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="detail"]  {{ color: {t.TEXT}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="readout"] {{
+    color: {t.TEXT}; font-family: "{t.MONO_FONT}"; font-size: {t.SIZE_LABEL}px; background: transparent;
+}}
+
+QLineEdit[role="input"], QSpinBox[role="input"] {{ padding: 2px 5px; font-size: {t.SIZE_LABEL}px; }}
+
+QPushButton[role="small-button"] {{ font-size: {t.SIZE_LABEL}px; padding: 3px 10px; }}
+QPushButton[role="small-button"][shape="icon"] {{ padding: 0; }}
+QPushButton[role="small-button"]:focus {{ border-color: {t.BORDER_STRONG}; }}
+QPushButton[role="small-button"]:hover {{ border-color: {t.ACCENT}; }}
+QPushButton[role="small-button"]:checked {{ background: {t.OK_TINT}; color: {t.OK}; border-color: {t.OK}; }}
+QPushButton[role="small-button"]:disabled {{ background: {t.CARD}; color: {t.DISABLED}; border-color: {t.BORDER}; }}
+
+QWidget[role="popover"] {{
+    background: {t.CARD}; border: 1px solid {t.BORDER_STRONG}; border-top: 2px solid {t.ACCENT};
+    border-radius: {t.RADIUS_CARD}px;
+}}
+QFrame[role="divider"] {{ background: {t.DIVIDER}; border: none; }}
+
+QProgressBar[role="meter"] {{
+    background: {t.RAISED}; border: 1px solid {t.BORDER_STRONG}; border-radius: 4px; text-align: center;
+}}
+QProgressBar[role="meter"]::chunk {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {t.OK}, stop:0.6 {t.METER_MID}, stop:1 {t.ERROR});
+    border-radius: 2px;
+}}
+
+QLabel[role="clip"] {{
+    border-radius: 3px; font-family: "{t.MONO_FONT}"; font-size: 8px; font-weight: bold; padding: 1px 3px;
+    background: {t.RAISED}; color: {t.DISABLED};
+}}
+QLabel[role="clip"][state="on"] {{ background: {t.ERROR}; color: #ffffff; }}
 QLabel[role="status"] {{ color: {t.TEXT_MUTED}; font-size: {t.SIZE_LABEL}px; }}
 
 QPushButton[role="sound-mode"] {{

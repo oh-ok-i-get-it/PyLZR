@@ -32,6 +32,20 @@ def set_role(widget: QWidget, role: str, **props: str) -> None:
         widget.setProperty(name, value)
 
 
+def set_props(widget: QWidget, **props: str) -> None:
+    """Change style properties of a shown widget (e.g. state='on') and
+    re-apply its rules. Does nothing when the values are unchanged, so it is
+    cheap to call on every update."""
+    changed = False
+    for name, value in props.items():
+        if widget.property(name) != value:
+            widget.setProperty(name, value)
+            changed = True
+    if changed:
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+
+
 def title_font() -> QFont:
     """Font of small-caps titles: semibold, letter-spaced."""
     font = QFont(theme.UI_FONT)

@@ -4,7 +4,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QHBoxLayout, QLabel
 
 from pylzr.gui import panel_style, style, theme
-from pylzr.gui.widgets import Card, IndicatorTile, PlainTextLabel, SectionTitle, ValueLabel
+from pylzr.gui.widgets import Card, IndicatorTile, PlainTextLabel, SectionTitle, ValueLabel, set_props
 
 
 def shown(label: QLabel) -> str:
@@ -69,6 +69,16 @@ def test_card_puts_content_in_its_body(qapp):
 
 def test_every_role_has_rules():
     rules = style.role_rules()
-    for role in ('section', 'card', 'tile', 'value', 'status', 'sound-mode', 'toolbar-button'):
+    for role in ('section', 'card', 'tile', 'value', 'status', 'sound-mode', 'toolbar-button', 'log', 'label',
+                 'detail', 'readout', 'input', 'small-button', 'popover', 'divider', 'meter', 'clip'):
         assert f'[role="{role}"]' in rules, role
     assert rules in style.stylesheet()
+
+
+def test_set_props_changes_only_what_differs(qapp):
+    label = QLabel()
+    set_props(label, state='off')
+    assert label.property('state') == 'off'
+    set_props(label, state='on')
+    assert label.property('state') == 'on'
+    assert panel_style.label('Gain').property('role') == 'label'

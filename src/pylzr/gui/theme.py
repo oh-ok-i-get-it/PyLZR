@@ -9,6 +9,7 @@ ACCENT    = '#58a6ff'   # section titles, focus/hover, active gear
 OK        = '#2ecc71'   # connected / on
 WARN      = '#e3b341'   # working, but needs attention
 ERROR     = '#e74c3c'   # disconnected / clipping
+METER_MID = '#f39c12'   # middle of the signal level meter (green → orange → red)
 
 # Surfaces, lines and text of the black UI (gui/style.py builds the app stylesheet from these)
 BG            = '#000000'   # window and plot background
