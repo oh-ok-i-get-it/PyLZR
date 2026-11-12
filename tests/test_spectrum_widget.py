@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 import numpy as np
 import pytest
 
@@ -20,11 +22,20 @@ def spectrum(value):
 
 
 def test_draws_every_bin_but_dc_against_its_frequency(widget):
+    """Each band line after the first also starts at the previous band's last
+    bin (so the drawn line has no gaps); without those shared points the
+    lines are exactly bins 1..1024."""
     widget.update_spectrum(np.arange(1025, dtype=float))
     xs = [line.getOriginalDataset()[0] for line in widget._spectrum_lines]
     ys = shown(widget)
-    np.testing.assert_array_equal(np.concatenate(ys), np.arange(1, 1025))
-    np.testing.assert_allclose(np.concatenate(xs), np.arange(1, 1025) * 44100 / 2048)
+    for previous, line in pairwise(ys):
+        assert line[0] == previous[-1]
+
+    def own(parts):            # each line without the point it shares with the one before
+        return np.concatenate([parts[0], *(p[1:] for p in parts[1:])])
+
+    np.testing.assert_array_equal(own(ys), np.arange(1, 1025))
+    np.testing.assert_allclose(own(xs), np.arange(1, 1025) * 44100 / 2048)
 
 
 def test_without_smoothing_shows_raw_bands(widget):

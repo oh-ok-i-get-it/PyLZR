@@ -11,6 +11,8 @@ from ..analysis import BandLayout
 _BAND_COLOURS = (theme.LOW_BAND, theme.MID_BAND, theme.HIGH_BAND, theme.TOP_BAND)
 _FILLED       = (theme.LOW_BAND, theme.HIGH_BAND)   # the analysed bands get a soft fill
 _FILL_ALPHA   = 0.10                                 # 0 turns the fill off
+_TITLE_TRACKING = 1.5    # px between title letters, like the small-caps titles elsewhere
+_ROW_STRETCH  = (1, 2)   # waveform : spectrum height
 
 
 class SpectrumWidget(QWidget):
@@ -47,7 +49,9 @@ class SpectrumWidget(QWidget):
 
         wf_x = pg.AxisItem(orientation='bottom')
         wf_x.setTicks([[(x, str(x)) for x in range(0, 2 * chunk + 1, chunk // 2)]])
-        self.waveform = self._gfx.addPlot(title='WAVEFORM', row=1, col=1, axisItems={'bottom': wf_x})
+        wf_y = pg.AxisItem(orientation='left')
+        wf_y.setTicks([[(v, str(v)) for v in (0, 128, 255)]])          # bottom, centre line, top
+        self.waveform = self._gfx.addPlot(title='WAVEFORM', row=1, col=1, axisItems={'bottom': wf_x, 'left': wf_y})
         self.waveform.setYRange(0, 255, padding=0)
         self.waveform.setXRange(0, 2 * chunk, padding=0.005)
 
@@ -60,12 +64,16 @@ class SpectrumWidget(QWidget):
         self.spectrum.setYRange(-4, 0, padding=0)
         self.spectrum.setXRange(np.log10(20), np.log10(rate / 2), padding=0.005)
 
-        # Grid steps: waveform every half chunk and 50 levels; spectrum every decade
-        # (its view is in log10 units)
-        for plot, title, grid_x, grid_y in ((self.waveform, 'WAVEFORM', chunk // 2, 50),
+        # Grid steps: waveform every half chunk and quarter of its range; spectrum
+        # every decade (its view is in log10 units)
+        for plot, title, grid_x, grid_y in ((self.waveform, 'WAVEFORM', chunk // 2, 64),
                                             (self.spectrum, 'SPECTRUM', 1, 1)):
             plot.getViewBox().keyPressEvent = lambda ev: ev.ignore()
             self._style_plot(plot, title, grid_x, grid_y)
+
+        grid = self._gfx.ci.layout
+        for row, stretch in zip((1, 2), _ROW_STRETCH, strict=True):
+            grid.setRowStretchFactor(row, stretch)
 
         self._waveform_line = self.waveform.plot(pen=pg.mkPen(theme.ACCENT, width=1))
         # low, mid, high, top (not analysed); the spectrum's y range starts at log10 = -4
@@ -77,14 +85,15 @@ class SpectrumWidget(QWidget):
                 fill.setAlphaF(_FILL_ALPHA)
             self._spectrum_lines.append(self.spectrum.plot(
                 pen=pg.mkPen(colour, width=1), fillLevel=-4 if fill else None, brush=fill))
-        # The log x-axis can't show 0 Hz, so bin 0 (DC) is not drawn
         self._spectrum_x = self._drawn(self._bands.split(self._bands.freqs))
 
     @staticmethod
     def _style_plot(plot, title: str, grid_x: float, grid_y: float):
-        """Dim title, axis text in the UI font, and a faint grid. The grid is a
-        separate item: the axes' own grid hides the edge tick labels (0, 1)."""
-        plot.setTitle(title, color=theme.TEXT_DIM, size='8pt', bold=True)
+        """Dim letter-spaced title, axis text in the UI font, a fixed-width left
+        axis (so both plots line up) and a faint grid. The grid is a separate
+        item: the axes' own grid hides the edge tick labels (0, 1)."""
+        plot.setTitle(f'<span style="letter-spacing:{_TITLE_TRACKING}px">{title}</span>',
+                      color=theme.TEXT_DIM, size='8pt', bold=True)
         font = QFont(theme.UI_FONT)
         font.setPixelSize(theme.SIZE_LABEL)
         for name in ('left', 'bottom'):
@@ -92,6 +101,7 @@ class SpectrumWidget(QWidget):
             axis.setPen(pg.mkPen(theme.AXIS_LINE))
             axis.setTextPen(pg.mkPen(theme.AXIS))
             axis.setStyle(tickFont=font)
+        plot.getAxis('left').setWidth(theme.PLOT_AXIS_W)
         grid = pg.GridItem(pen=pg.mkPen(theme.GRID), textPen=None)
         grid.setTickSpacing(x=[grid_x], y=[grid_y])
         grid.setZValue(-100)                 # behind the lines
@@ -110,8 +120,14 @@ class SpectrumWidget(QWidget):
 
     @staticmethod
     def _drawn(segments):
+        """The band pieces as drawn: bin 0 (DC) dropped, since the log x-axis
+        can't show 0 Hz, and every band after the first starting at the
+        previous band's last bin, so the line has no gaps between colours."""
         low, *rest = segments
-        return [low[1:], *rest]
+        drawn = [low[1:]]
+        for segment in rest:
+            drawn.append(np.concatenate((drawn[-1][-1:], segment)))
+        return drawn
 
     def update_spectrum(self, spectrum: np.ndarray):
         if self._smoothing > 0.0:
