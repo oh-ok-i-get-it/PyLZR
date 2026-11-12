@@ -146,8 +146,8 @@ def test_tester_values_go_out_live_and_clear_on_close(harness):
     set_mode(harness, 'DMX')
     tester = open_tester(harness)
     assert tester.isVisible()
-    tester._start_box.setValue(5)
-    tester._sliders[0].setValue(200)
+    tester.channels._start_box.setValue(5)
+    tester.channels._sliders[0].setValue(200)
     w.dmx_out._tick()
     assert frames()[-1][4] == 200                        # channel 5
     tester.close()
@@ -163,7 +163,7 @@ def test_tester_is_one_window(harness):
 def test_leaving_dmx_closes_the_tester(harness):
     set_mode(harness, 'DMX')
     tester = open_tester(harness)
-    tester._sliders[0].setValue(255)
+    tester.channels._sliders[0].setValue(255)
     set_mode(harness, 'MIDI')
     assert not tester.isVisible()
     assert not harness.window.dmx_out.universe.has_overrides

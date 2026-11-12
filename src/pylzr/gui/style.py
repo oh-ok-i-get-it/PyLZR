@@ -310,6 +310,15 @@ QMenu::item {{ padding: 5px 12px; border-radius: 5px; }}
 QMenu::item:selected {{ background: {tint}; }}
 QMenu::item:disabled {{ color: {t.TEXT_MUTED}; }}
 
+QTabWidget::pane {{ border: none; border-top: 1px solid {t.DIVIDER}; }}
+QTabBar {{ background: transparent; qproperty-drawBase: 0; }}
+QTabBar::tab {{
+    background: transparent; color: {t.TEXT_DIM}; font-size: {t.SIZE_LABEL}px; font-weight: 600;
+    border: none; border-bottom: 2px solid transparent; padding: 4px 12px 6px 12px; margin-right: 4px;
+}}
+QTabBar::tab:hover {{ color: {t.TEXT}; }}
+QTabBar::tab:selected {{ color: {t.TEXT}; border-bottom-color: {t.ACCENT}; }}
+
 QMessageBox QLabel#qt_msgbox_label, QMessageBox QLabel#qt_msgbox_informativelabel {{ min-width: 260px; }}
 {role_rules()}'''
 
