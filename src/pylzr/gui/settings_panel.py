@@ -7,56 +7,23 @@ from ..analysis import FFTWorker
 from ..core import CONTROL_MODES
 from . import style, theme
 from .dmx_settings import DMXSettings
-from .panel_style import ICON_BUTTON_STYLE, SMALL_BUTTON_STYLE, label, pad, section
+from .panel_style import label, pad, section
+from .widgets import ElidedComboBox, set_props, set_role
 
 _W = 560  # panel width — wide enough for 3 columns
 
-# Dropdowns and sliders use the app-wide look (gui/style.py)
-_PANEL_STYLE = (
-    'QWidget#SettingsPanel {'
-    f'  background: {theme.CARD};'
-    f'  border: 1px solid {theme.BORDER_STRONG};'
-    f'  border-top: 2px solid {theme.ACCENT};'
-    f'  border-radius: {theme.RADIUS_CARD}px;'
-    '}'
-)
-
-_VALUE_STYLE   = f'color: {theme.TEXT}; font-size: {theme.SIZE_LABEL}px; background: transparent;'
-_READOUT_STYLE = (
-    f'color: {theme.TEXT_DIM}; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
-    ' background: transparent;'
-)
-_DIAG_STYLE    = (
-    f'color: {theme.TEXT}; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
-    ' font-weight: bold; background: transparent;'
-)
-
-_LEVEL_STYLE = (
-    'QProgressBar {'
-    f'  background: {theme.RAISED}; border: 1px solid {theme.BORDER_STRONG};'
-    '  border-radius: 4px; text-align: center;'
-    '}'
-    'QProgressBar::chunk {'
-    '  background: qlineargradient(x1:0,y1:0,x2:1,y2:0,'
-    f'    stop:0 {theme.OK}, stop:0.6 #f39c12, stop:1 {theme.ERROR});'
-    '  border-radius: 2px;'
-    '}'
-)
-
+# The panel, readouts, meter and CLIP badge use style roles (gui/style.py).
+# The status dots keep inline styles: tests read their colours.
 _IND_ON      = f'border-radius:5px; background:{theme.OK};'
 _IND_SENT    = f'border-radius:5px; background:{theme.ACCENT};'
 _IND_WARN    = f'border-radius:5px; background:{theme.WARN};'
 _IND_OFF     = f'border-radius:5px; background:{theme.ERROR};'
-_IND_NA      = 'border-radius:5px; background:#383838;'
+_IND_NA      = f'border-radius:5px; background:{theme.DOT_OFF};'
 
 # DMXOutput status state -> indicator: green once the node answers, blue
 # while sending without an answer (some nodes never answer; not an error)
 _DMX_DOTS = {'off': _IND_NA, 'connected': _IND_ON, 'sending': _IND_SENT, 'warning': _IND_WARN,
              'error': _IND_OFF}
-_CLIP_BASE   = f'border-radius:3px; font-family:"{theme.MONO_FONT}"; font-size:8px; font-weight:bold; padding:1px 3px;'
-_CLIP_ON     = _CLIP_BASE + f' background:{theme.ERROR}; color:#fff;'
-_CLIP_OFF    = _CLIP_BASE + f' background:{theme.RAISED}; color:{theme.DISABLED};'
-_DIV_STYLE   = f'background:{theme.DIVIDER}; border:none;'
 
 # (label, value) choices for the fixed dropdowns
 _LOG_LEVELS    = [('Info', 'info'), ('Debug', 'debug'), ('Quiet', 'quiet')]
@@ -80,7 +47,7 @@ def _divider(shape: QFrame.Shape) -> QFrame:
         f.setFixedHeight(1)
     else:
         f.setFixedWidth(1)
-    f.setStyleSheet(_DIV_STYLE)
+    set_role(f, 'divider')
     return f
 
 
@@ -110,13 +77,15 @@ def _fill_combo(combo: QComboBox, items: list[tuple[str, object]],
     """Replace combo items without emitting signals.
 
     items are (label, value) pairs; each value is stored on its item and read
-    back with combo.itemData(). Long labels are truncated for display. Selects
+    back with combo.itemData(). Labels over 32 characters are cut to keep the
+    open list a sensible width; the full label is the item's tooltip. Selects
     the item whose value == current, else fallback_row (-1 = none).
     """
     combo.blockSignals(True)
     combo.clear()
     for text, value in items:
         combo.addItem(text if len(text) <= 32 else text[:30] + '…', value)
+        combo.setItemData(combo.count() - 1, text, Qt.ToolTipRole)
     row = combo.findData(current) if current is not None else -1
     combo.setCurrentIndex(row if row >= 0 else fallback_row)
     combo.blockSignals(False)
@@ -171,8 +140,8 @@ class SettingsPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('SettingsPanel')
+        set_role(self, 'popover')
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setStyleSheet(_PANEL_STYLE)
         self.setFixedWidth(_W)
         self._build()
         self.adjustSize()
@@ -213,7 +182,7 @@ class SettingsPanel(QWidget):
             dot = _dot()
             setattr(self, dot_attr, dot)
             val = QLabel('—')
-            val.setStyleSheet(_VALUE_STYLE)
+            set_role(val, 'detail')
             setattr(self, val_attr, val)
 
             grp = QHBoxLayout()
@@ -241,12 +210,12 @@ class SettingsPanel(QWidget):
         self._level_bar.setValue(0)
         self._level_bar.setTextVisible(False)
         self._level_bar.setFixedHeight(8)
-        self._level_bar.setStyleSheet(_LEVEL_STYLE)
+        set_role(self._level_bar, 'meter')
 
         self._clip_lbl = QLabel('CLIP')
         self._clip_lbl.setFixedSize(28, 14)
         self._clip_lbl.setAlignment(Qt.AlignCenter)
-        self._clip_lbl.setStyleSheet(_CLIP_OFF)
+        set_role(self._clip_lbl, 'clip', state='off')
 
         bar_row.addWidget(self._level_bar)
         bar_row.addWidget(self._clip_lbl)
@@ -267,7 +236,6 @@ class SettingsPanel(QWidget):
         h.addWidget(self._build_app_col(),      stretch=1)
 
         w = QWidget()
-        w.setStyleSheet('background:transparent;')
         w.setLayout(h)
         return w
 
@@ -281,7 +249,7 @@ class SettingsPanel(QWidget):
         self._device_combo = self._dropdown(self.audio_device_changed, placeholder='No devices found')
         self._rescan_btn = QPushButton('↻')
         self._rescan_btn.setFixedSize(24, 22)
-        self._rescan_btn.setStyleSheet(ICON_BUTTON_STYLE)
+        set_role(self._rescan_btn, 'small-button', shape='icon')
         rescan_icon = style.icon('rotate-cw', theme.TEXT_DIM, size=13)
         if not rescan_icon.isNull():            # otherwise the ↻ glyph stays
             self._rescan_btn.setIcon(rescan_icon)
@@ -295,13 +263,12 @@ class SettingsPanel(QWidget):
         device_row.addWidget(self._device_combo, stretch=1)
         device_row.addWidget(self._rescan_btn)
         device_widget = QWidget()
-        device_widget.setStyleSheet('background:transparent;')
         device_widget.setLayout(device_row)
         v.addLayout(_labeled_control('Device', None, device_widget))
 
         # Gain slider
         self._gain_readout = QLabel('100%')
-        self._gain_readout.setStyleSheet(_READOUT_STYLE)
+        set_role(self._gain_readout, 'readout')
         self._gain_slider = QSlider(Qt.Horizontal)
         self._gain_slider.setRange(25, 400)
         self._gain_slider.setValue(100)
@@ -324,7 +291,7 @@ class SettingsPanel(QWidget):
 
         # Smoothing slider
         self._smooth_readout = QLabel('0.0')
-        self._smooth_readout.setStyleSheet(_READOUT_STYLE)
+        set_role(self._smooth_readout, 'readout')
         self._smooth_slider = QSlider(Qt.Horizontal)
         self._smooth_slider.setRange(0, 90)
         self._smooth_slider.setValue(0)
@@ -362,7 +329,7 @@ class SettingsPanel(QWidget):
         self._sm_btn = QPushButton('OFF')
         self._sm_btn.setCheckable(True)
         self._sm_btn.setFixedHeight(22)
-        self._sm_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        set_role(self._sm_btn, 'small-button')
         self._sm_btn.clicked.connect(lambda: self.app_sm_toggled.emit())
         sm_row.addWidget(self._sm_btn)
         sm_row.addStretch(1)
@@ -371,7 +338,7 @@ class SettingsPanel(QWidget):
         # Reset saved settings
         self._reset_btn = QPushButton('Reset to defaults')
         self._reset_btn.setFixedHeight(22)
-        self._reset_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        set_role(self._reset_btn, 'small-button')
         self._reset_btn.setToolTip('Restore every setting (cutoffs, rate, gain, devices, …) to its default.')
         self._reset_btn.clicked.connect(lambda: self.reset_requested.emit())
         v.addWidget(self._reset_btn)
@@ -392,7 +359,7 @@ class SettingsPanel(QWidget):
             col.setSpacing(6)
             col.addWidget(label(text))
             val = QLabel('—')
-            val.setStyleSheet(_DIAG_STYLE)
+            set_role(val, 'readout')
             col.addWidget(val)
             setattr(self, attr, val)
             h.addLayout(col)
@@ -403,8 +370,8 @@ class SettingsPanel(QWidget):
     @staticmethod
     def _dropdown(signal, items: list[tuple[str, object]] = (), placeholder: str = '') -> QComboBox:
         """Styled combo of (label, value) items that emits signal(value) when
-        the user picks an item."""
-        combo = QComboBox()
+        the user picks an item. Names too long to show end in '…'."""
+        combo = ElidedComboBox()
         combo.setPlaceholderText(placeholder)
         _fill_combo(combo, list(items), fallback_row=0)
 
@@ -447,7 +414,7 @@ class SettingsPanel(QWidget):
 
     def set_level(self, peak: float, clipping: bool = False):
         self._level_bar.setValue(int(peak * 100))
-        self._clip_lbl.setStyleSheet(_CLIP_ON if clipping else _CLIP_OFF)
+        set_props(self._clip_lbl, state='on' if clipping else 'off')
 
     def set_diagnostics(self, fps: float, overflows: int):
         self._diag_fps.setText(f'{fps:.0f} fps')

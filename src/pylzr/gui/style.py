@@ -4,6 +4,27 @@ stylesheet and pyqtgraph's colours, all built from the tokens in theme.py.
 apply() runs once in __main__.main(), right after the QApplication exists and
 before any window is built. It only changes how widgets look. A widget's own
 setStyleSheet() still wins over these rules where both set the same thing.
+
+Style roles (set with widgets.set_role(); rules in role_rules()). Prefer these
+building blocks from gui/widgets.py over per-widget stylesheets:
+    section         SectionTitle: small-caps title; tone 'accent' (default) or 'dim'
+    card            Card: rounded panel on the window background
+    tile            IndicatorTile: DM / CNT / LOW / HIGH; tone 'neutral', 'low' or 'high'
+    value           ValueLabel: 'Name: value' with a bright mono value
+    log             a read-only text box sitting borderless on a card (Console, Averages)
+    label           a control label ('Input Gain'); tone 'dim' (default) or 'light'; panel_style.label() makes one
+    detail          a short bright text beside a label (a connection's port or device)
+    readout         a bright mono value on its own ('100%', '43 fps')
+    input           a compact line edit / spin box (11 px mono)
+    small-button    a compact 22 px button, green when checked; shape 'icon' for icon-only
+    popover         a floating panel: card colour with an accent stripe on top (Settings)
+    divider         a 1 px line between sections (a QFrame)
+    meter           the signal level bar (a QProgressBar)
+    clip            the CLIP badge; state 'on' or 'off' (change it with widgets.set_props)
+    warning         an amber strip with a short caution (the DMX tester's live-output warning)
+    status          a muted one-line status label
+    sound-mode      the big Sound Mode toggle (its dot is the button's on/off icon)
+    toolbar-button  an icon-only button, outlined on hover, accent when checked (the gear)
 """
 
 import sys
@@ -35,7 +56,7 @@ _DARK_MODE_ATTRIBUTES = (20, 19)
 
 
 def rgba(hex_color: str, alpha: float) -> str:
-    """'#58a6ff', 0.2 -> 'rgba(88, 166, 255, 0.2)' for tinted fills in stylesheets."""
+    """rgba(theme.ACCENT, 0.2) -> 'rgba(88, 166, 255, 0.2)', for tinted fills in stylesheets."""
     c = QColor(hex_color)
     return f'rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})'
 
@@ -160,6 +181,11 @@ def status_dot_icon(off_color: str, on_color: str, size: int = 16) -> QIcon:
     return result
 
 
+def text_weight() -> int:
+    """theme.WEIGHT_TEXT (CSS scale, 100–900) on Qt 5's QFont scale (0–99)."""
+    return {400: QFont.Normal, 500: QFont.Medium, 600: QFont.DemiBold, 700: QFont.Bold}[theme.WEIGHT_TEXT]
+
+
 def load_fonts() -> set[str]:
     """Register the bundled fonts with Qt and return their family names.
     A font that fails to load is skipped; Qt then falls back to the system font."""
@@ -184,7 +210,7 @@ def palette() -> QPalette:
         (QPalette.PlaceholderText, theme.TEXT_MUTED),
         (QPalette.Button,          theme.BUTTON),
         (QPalette.ButtonText,      theme.TEXT),
-        (QPalette.BrightText,      '#ffffff'),
+        (QPalette.BrightText,      theme.WHITE),
         (QPalette.ToolTipBase,     theme.RAISED),
         (QPalette.ToolTipText,     theme.TEXT),
         (QPalette.Highlight,       theme.ACCENT),
@@ -212,17 +238,6 @@ QToolTip {{
     background: {t.RAISED}; color: {t.TEXT};
     border: 1px solid {t.BORDER_STRONG}; border-radius: 5px; padding: 4px 8px;
 }}
-
-QGroupBox {{
-    background: {t.CARD}; border: 1px solid {t.BORDER}; border-radius: {t.RADIUS_CARD}px;
-    margin-top: 0px; padding: 22px 10px 6px 10px;
-    font-size: {t.SIZE_SECTION}px; font-weight: 600;   /* the title's font; Qt ignores fonts on ::title */
-}}
-QGroupBox::title {{
-    subcontrol-origin: padding; subcontrol-position: top left;
-    left: 12px; top: 9px; color: {t.ACCENT};
-}}
-QGroupBox QLabel {{ font-size: {t.SIZE_BODY}px; font-weight: normal; }}
 
 QPushButton {{
     background: {t.BUTTON}; color: {t.TEXT};
@@ -280,8 +295,8 @@ QTextEdit, QPlainTextEdit {{
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 0; }}
-QScrollBar::handle {{ background: #333333; border-radius: 3px; margin: 2px; }}
-QScrollBar::handle:hover {{ background: #444444; }}
+QScrollBar::handle {{ background: {t.SCROLL_HANDLE}; border-radius: 3px; margin: 2px; }}
+QScrollBar::handle:hover {{ background: {t.SCROLL_HOVER}; }}
 QScrollBar::handle:vertical {{ min-height: 24px; }}
 QScrollBar::handle:horizontal {{ min-width: 24px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
@@ -294,6 +309,91 @@ QMenu {{
 QMenu::item {{ padding: 5px 12px; border-radius: 5px; }}
 QMenu::item:selected {{ background: {tint}; }}
 QMenu::item:disabled {{ color: {t.TEXT_MUTED}; }}
+{role_rules()}'''
+
+
+def role_rules() -> str:
+    """Rules for the style roles set by gui/widgets.py (setProperty('role', ...)).
+    Fonts that need letter spacing are set on the widget instead (see widgets.title_font)."""
+    t = theme
+    return f'''
+QLabel[role="section"] {{ color: {t.ACCENT}; background: transparent; }}
+QLabel[role="section"][tone="dim"] {{ color: {t.TEXT_DIM}; }}
+
+QFrame[role="card"] {{
+    background: {t.CARD}; border: 1px solid {t.BORDER}; border-radius: {t.RADIUS_CARD}px;
+}}
+
+QLabel[role="tile"] {{
+    background: {t.CARD}; border: 1px solid {t.TILE_BORDER}; border-radius: {t.RADIUS_CARD}px;
+}}
+QLabel[role="tile"][tone="low"]  {{ border-color: {mix(t.LOW_BAND, t.TILE_BORDER, 0.35)}; }}
+QLabel[role="tile"][tone="high"] {{ border-color: {mix(t.HIGH_BAND, t.TILE_BORDER, 0.35)}; }}
+
+QLabel[role="value"] {{ background: transparent; }}
+QTextEdit[role="log"] {{ background: transparent; border: none; }}
+
+QLabel[role="label"]   {{ color: {t.TEXT_DIM}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="label"][tone="light"] {{ color: {t.TEXT}; }}
+QLabel[role="warning"] {{
+    color: {t.WARN}; background: {mix(t.WARN, t.BG, 0.07)}; border: 1px solid {mix(t.WARN, t.BG, 0.25)};
+    border-radius: {t.RADIUS}px; padding: 5px 10px; font-size: {t.SIZE_LABEL}px;
+}}
+QLabel[role="detail"]  {{ color: {t.TEXT}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="readout"] {{
+    color: {t.TEXT}; font-family: "{t.MONO_FONT}"; font-size: {t.SIZE_LABEL}px; background: transparent;
+}}
+
+QLineEdit[role="input"], QSpinBox[role="input"] {{ padding: 2px 5px; font-size: {t.SIZE_LABEL}px; }}
+
+QPushButton[role="small-button"] {{ font-size: {t.SIZE_LABEL}px; padding: 3px 10px; }}
+QPushButton[role="small-button"][shape="icon"] {{ padding: 0; }}
+QPushButton[role="small-button"]:focus {{ border-color: {t.BORDER_STRONG}; }}
+QPushButton[role="small-button"]:hover {{ border-color: {t.ACCENT}; }}
+QPushButton[role="small-button"]:checked {{ background: {t.OK_TINT}; color: {t.OK}; border-color: {t.OK}; }}
+QPushButton[role="small-button"]:disabled {{ background: {t.CARD}; color: {t.DISABLED}; border-color: {t.BORDER}; }}
+
+QWidget[role="popover"] {{
+    background: {t.CARD}; border: 1px solid {t.BORDER_STRONG}; border-top: 2px solid {t.ACCENT};
+    border-radius: {t.RADIUS_CARD}px;
+}}
+QFrame[role="divider"] {{ background: {t.DIVIDER}; border: none; }}
+
+QProgressBar[role="meter"] {{
+    background: {t.RAISED}; border: 1px solid {t.BORDER_STRONG}; border-radius: 4px; text-align: center;
+}}
+QProgressBar[role="meter"]::chunk {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {t.OK}, stop:0.6 {t.METER_MID}, stop:1 {t.ERROR});
+    border-radius: 2px;
+}}
+
+QLabel[role="clip"] {{
+    border-radius: 3px; font-family: "{t.MONO_FONT}"; font-size: 8px; font-weight: bold; padding: 1px 3px;
+    background: {t.RAISED}; color: {t.DISABLED};
+}}
+QLabel[role="clip"][state="on"] {{ background: {t.ERROR}; color: {t.WHITE}; }}
+QLabel[role="status"] {{ color: {t.TEXT_MUTED}; font-size: {t.SIZE_LABEL}px; }}
+
+QPushButton[role="sound-mode"] {{
+    background: {t.CARD}; color: {t.TEXT_DIM};
+    border: 1px solid {t.BORDER_STRONG}; border-radius: {t.RADIUS_CARD}px;
+    font-size: {t.SIZE_TITLE}px; font-weight: 600; padding: 0 12px;
+}}
+QPushButton[role="sound-mode"]:hover {{ border-color: {t.HOVER_EDGE}; }}
+QPushButton[role="sound-mode"]:checked {{
+    background: {mix(t.OK, t.BG, 0.09)}; color: {mix(t.OK, t.WHITE, 0.5)};
+    border-color: {mix(t.OK, t.BG, 0.55)};
+}}
+QPushButton[role="sound-mode"]:checked:hover {{ border-color: {t.OK}; }}
+
+QPushButton[role="toolbar-button"] {{
+    background: transparent; color: {t.TEXT_DIM}; font-size: 17px;
+    border: 1px solid transparent; border-radius: {t.RADIUS}px; padding: 0;
+}}
+QPushButton[role="toolbar-button"]:hover {{ background: {t.BUTTON}; border-color: {t.BORDER_STRONG}; }}
+QPushButton[role="toolbar-button"]:checked {{
+    background: {mix(t.ACCENT, t.BG, 0.14)}; border-color: {t.ACCENT}; color: {t.ACCENT};
+}}
 '''
 
 
@@ -306,6 +406,7 @@ def apply(app: QApplication) -> None:
     if theme.UI_FONT in families:
         font = QFont(theme.UI_FONT)
         font.setPixelSize(theme.SIZE_BODY)
+        font.setWeight(text_weight())       # rules that set only size or family keep this weight
         app.setFont(font)
     app.setStyleSheet(stylesheet())
     pg.setConfigOptions(background=theme.BG, foreground=theme.AXIS)

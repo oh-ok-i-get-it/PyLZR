@@ -64,12 +64,28 @@ def test_linear_zero_value():
     assert strobe.outputs() == {'Strobe': frozenset(range(256))}
 
 
+def test_linear_can_release_its_channel_at_zero():
+    """Gruolin ch19: wave_x at 0 lets wave_y have the Wave channel."""
+    wave_x = Linear('wave_x', 'Wave', 1, 127, release_at_zero=True)
+    assert not wave_x.active({'wave_x': 0.0}) and not wave_x.active({})
+    assert wave_x.active({'wave_x': 0.0001})
+    assert [render_one(wave_x, wave_x=v) for v in (0.0001, 1)] == [1, 127]
+    assert wave_x.outputs() == {'Wave': frozenset(range(1, 128))}
+    assert wave_x.off_values() == {}
+
+
+def test_linear_off_value_is_its_zero():
+    assert Linear('strobe', 'Strobe', 1, 255, zero=0).off_values() == {'Strobe': frozenset({0})}
+    assert Linear('size', 'Pattern Size', 255, 0).off_values() == {}
+
+
 @pytest.mark.parametrize('mapping', [
     Linear('size', 'Pattern Size', 255, 0),
     Linear('size', 'Pattern Size', 255, 0, min=0.1, max=0.9),
     Linear('scan_speed', 'Scan Speed', 128, 255),
     Linear('strobe', 'Strobe', 1, 255, zero=0),
     Linear('zoom', 'Zoom', 0, 127, min=0.5, max=0.5),
+    Linear('wave_y', 'Wave', 128, 255, release_at_zero=True),
 ])
 def test_linear_sweep(mapping):
     found = sent(mapping, mapping.attribute, unit_sweep())
@@ -92,6 +108,7 @@ def test_linear_is_inactive_without_its_attribute():
     (dict(start=0, end=255, min=0.6, max=0.4), r'min \(0.6\) is above max \(0.4\)'),
     (dict(start=0, end=255, max=1.5), 'max must be a number from 0 to 1'),
     (dict(start=0, end=255, zero=300), 'zero must be a DMX value'),
+    (dict(start=1, end=255, zero=0, release_at_zero=True), 'either sends zero or releases the channel'),
 ])
 def test_bad_linear(kwargs, message):
     with pytest.raises(ValueError, match=message):
@@ -163,6 +180,8 @@ def test_direction_with_off_sends_it_at_zero():
     speed = Direction('color_speed', 'Color Speed', forward=(4, 127), reverse=(128, 255), off=0)
     assert speed.active({'color_speed': 0.0})
     assert [render_one(speed, color_speed=v) for v in (0, 1, -1)] == [0, 127, 255]
+    assert speed.off_values() == {'Color Speed': frozenset({0})}
+    assert spin().off_values() == {}
 
 
 def test_direction_deadband():
@@ -226,6 +245,16 @@ def test_one_choice_can_set_several_channels():
     assert patterns.outputs() == {'Pattern Group': frozenset({64, 1}), 'Pattern Selection': frozenset({15, 5, 0})}
 
 
+def test_options_off_values_and_choices():
+    """Only choices called off or none may mean "nothing"."""
+    power = Options('power', {'off': {'On/Off': 0}, 'on': {'On/Off': 255}})
+    assert power.off_values() == {'On/Off': frozenset({0})}
+    assert power.options() == {'power': frozenset({'off', 'on'})}
+    effect = Options('color_effect', {'none': {'Color': 0}, 'jump': {'Color': 32}, 'gradient': {'Color': 240}})
+    assert effect.off_values() == {'Color': frozenset({0})}
+    assert colours().off_values() == {}
+
+
 def test_option_values_are_read_only():
     with pytest.raises(TypeError):
         colours().values['red']['Color'] = 9                                   # type: ignore[index]
@@ -286,6 +315,22 @@ def test_selected_sweep():
         assert found == {k: set(v) for k, v in mapping.choices[style].outputs().items()}
     assert mapping.outputs() == {'Scan Speed': frozenset(range(64, 256))}
     assert mapping.attributes == ('draw_style', 'scan_speed') and mapping.channels == ('Scan Speed',)
+
+
+def test_selected_off_values_and_choices_come_from_every_choice():
+    zoom = Selected('zoom_style', {
+        'shrink': Linear('zoom_motion', 'Zoom', 128, 159, release_at_zero=True),
+        'pulse': Direction('x_pulse', 'Zoom', forward=(192, 223), reverse=(224, 255), off=0),
+        'grow': Selected('x_variant', {'one': Linear('zoom_motion', 'Zoom', 160, 191, zero=5)}, 'one'),
+    }, default='shrink')
+    assert zoom.off_values() == {'Zoom': frozenset({0, 5})}
+    assert zoom.options() == {'zoom_style': frozenset({'shrink', 'pulse', 'grow'}), 'x_variant': frozenset({'one'})}
+
+
+def test_gradient_mappings_read_no_options():
+    assert Linear('size', 'Pattern Size', 255, 0).options() == {}
+    assert Bipolar('pos_x', 'Horizontal Position', 0, 128, 255).options() == {}
+    assert Bipolar('pos_x', 'Horizontal Position', 0, 128, 255).off_values() == {}
 
 
 @pytest.mark.parametrize('choices, default, message', [

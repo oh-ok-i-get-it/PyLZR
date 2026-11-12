@@ -9,7 +9,8 @@ from PyQt5.QtGui import QRegularExpressionValidator
 from ..core import DMX_DEFAULT_NODE_IP
 from ..dmx import NodeChoice, is_ipv4
 from . import style, theme
-from .panel_style import INPUT_STYLE, SMALL_BUTTON_STYLE, label, pad, section
+from .panel_style import label, pad, section
+from .widgets import set_role
 
 # Accepts what can still become an IPv4 address while typing; is_ipv4()
 # decides when editing finishes.
@@ -66,7 +67,7 @@ class DMXSettings(QWidget):
         self._node_ip_edit = QLineEdit(DMX_DEFAULT_NODE_IP)
         self._node_ip_edit.setValidator(QRegularExpressionValidator(_IPV4_TYPING))
         self._node_ip_edit.setFixedWidth(104)
-        self._node_ip_edit.setStyleSheet(INPUT_STYLE)
+        set_role(self._node_ip_edit, 'input')
         self._node_ip_edit.setToolTip("The Art-Net node's IP address (CR011R factory default: "
                                       f'{DMX_DEFAULT_NODE_IP})')
         self._node_ip_edit.editingFinished.connect(self._on_node_ip_edited)
@@ -75,7 +76,7 @@ class DMXSettings(QWidget):
 
         self._find_btn = QPushButton('Find')
         self._find_btn.setFixedHeight(22)
-        self._find_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        set_role(self._find_btn, 'small-button')
         self._find_btn.setIcon(style.icon('search', theme.TEXT_DIM, size=12))   # beside the text
         self._find_btn.setIconSize(QSize(12, 12))
         self._find_btn.setToolTip(_FIND_TIP)
@@ -92,7 +93,7 @@ class DMXSettings(QWidget):
             spin.setRange(0, top)
             spin.setButtonSymbols(QAbstractSpinBox.NoButtons)
             spin.setFixedWidth(34)
-            spin.setStyleSheet(INPUT_STYLE)
+            set_role(spin, 'input')
             spin.setToolTip(f'{tip} — as set in the node\'s menu. Type, scroll or use the arrow keys.')
             spin.valueChanged.connect(lambda _value: self._emit_node())
             row.addWidget(label(text))
@@ -102,7 +103,7 @@ class DMXSettings(QWidget):
 
         self._tester_btn = QPushButton('Channel tester…')
         self._tester_btn.setFixedHeight(22)
-        self._tester_btn.setStyleSheet(SMALL_BUTTON_STYLE)
+        set_role(self._tester_btn, 'small-button')
         self._tester_btn.clicked.connect(lambda: self.tester_requested.emit())
         row.addWidget(self._tester_btn)
         self.set_tester_enabled(False)

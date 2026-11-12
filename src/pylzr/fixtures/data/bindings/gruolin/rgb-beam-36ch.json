@@ -1,0 +1,374 @@
+{
+  "version": 1,
+  "name": "Gruolin RGB Beam (36ch)",
+  "comment": "The Gruolin RGB Fullcolor Beam Effect Light in its 36-channel mode: two pattern outputs (layers a and b), each with its own size, position, colour and motion. Mappings are in priority order: on a shared channel the first active one wins.",
+  "profile": "gruolin/rgb-fullcolor-beam-effect-light",
+  "mode": "36ch",
+  "layers": {"a": 0, "b": 17},
+  "base": {"Auto Speed": 0},
+  "extras": [
+    {
+      "name": "x_flowing_water",
+      "kind": "option",
+      "options": [
+        "water_1", "water_2", "water_3", "water_4", "water_5", "water_6", "water_7", "water_8",
+        "water_9", "water_10", "water_11", "water_12", "water_13", "water_14", "water_15",
+        "water_16", "water_17", "water_18", "water_19", "water_20", "water_21", "water_22",
+        "water_23", "water_24", "water_25", "water_26", "water_27", "water_28", "water_29",
+        "water_30", "water_31", "water_32", "water_33", "water_34", "water_35", "water_36",
+        "water_37", "water_38", "water_39", "water_40", "water_41", "water_42", "water_43",
+        "water_44", "water_45", "water_46", "water_47", "water_48", "water_49"
+      ],
+      "description": "The Gruolin's 49 flowing-water colour effects (instead of color)"
+    },
+    {
+      "name": "x_color_change",
+      "kind": "option",
+      "options": ["rgb", "original"],
+      "description": "The Gruolin's own colour changes: red-green-blue, or the pattern's original colours changing (instead of color)"
+    },
+    {
+      "name": "x_bright_scan",
+      "kind": "continuous",
+      "description": "Brightening line scan speed: 0 off … 1 fastest (instead of draw_style and scan_speed)"
+    },
+    {
+      "name": "x_move_style",
+      "kind": "option",
+      "options": ["wrap", "gap"],
+      "description": "How move_x and move_y scroll: wrap (edge to edge) or gap (fully off before coming back)"
+    },
+    {
+      "name": "x_shift_x",
+      "kind": "bipolar",
+      "description": "Second horizontal position: −1 inner edge … 0 centre … +1 outer edge; the two outputs are mirrored. Used while move_x is 0"
+    },
+    {
+      "name": "x_shift_y",
+      "kind": "bipolar",
+      "description": "Second vertical position: −1 inner edge … 0 centre … +1 outer edge. Used while move_y is 0"
+    },
+    {
+      "name": "x_zoom_pulse_2",
+      "kind": "continuous",
+      "description": "The second zoom pulse (looked the same as pulse): 0 off … 1 fastest"
+    }
+  ],
+  "mappings": [
+    {
+      "type": "options",
+      "attribute": "power",
+      "values": {
+        "off": {"On/Off": 0},
+        "on": {"On/Off": 255}
+      }
+    },
+    {
+      "type": "linear",
+      "attribute": "size",
+      "channel": "Pattern Size",
+      "invert": true,
+      "comment": "The channel runs large → small"
+    },
+    {
+      "type": "bipolar",
+      "attribute": "pos_x",
+      "channel": "Horizontal Position",
+      "centre": 128,
+      "limit": 0.5,
+      "comment": "limit 0.5 keeps at least half the pattern on-screen (64–192); check on the laser"
+    },
+    {
+      "type": "bipolar",
+      "attribute": "pos_y",
+      "channel": "Vertical Position",
+      "centre": 128,
+      "limit": 0.5
+    },
+    {
+      "type": "options",
+      "attribute": "x_flowing_water",
+      "values": {
+        "water_1": {"Color": 44},
+        "water_2": {"Color": 48},
+        "water_3": {"Color": 52},
+        "water_4": {"Color": 56},
+        "water_5": {"Color": 60},
+        "water_6": {"Color": 64},
+        "water_7": {"Color": 68},
+        "water_8": {"Color": 72},
+        "water_9": {"Color": 76},
+        "water_10": {"Color": 80},
+        "water_11": {"Color": 84},
+        "water_12": {"Color": 88},
+        "water_13": {"Color": 92},
+        "water_14": {"Color": 96},
+        "water_15": {"Color": 100},
+        "water_16": {"Color": 104},
+        "water_17": {"Color": 108},
+        "water_18": {"Color": 112},
+        "water_19": {"Color": 116},
+        "water_20": {"Color": 120},
+        "water_21": {"Color": 124},
+        "water_22": {"Color": 128},
+        "water_23": {"Color": 132},
+        "water_24": {"Color": 136},
+        "water_25": {"Color": 140},
+        "water_26": {"Color": 144},
+        "water_27": {"Color": 148},
+        "water_28": {"Color": 152},
+        "water_29": {"Color": 156},
+        "water_30": {"Color": 160},
+        "water_31": {"Color": 164},
+        "water_32": {"Color": 168},
+        "water_33": {"Color": 172},
+        "water_34": {"Color": 176},
+        "water_35": {"Color": 180},
+        "water_36": {"Color": 184},
+        "water_37": {"Color": 188},
+        "water_38": {"Color": 192},
+        "water_39": {"Color": 196},
+        "water_40": {"Color": 200},
+        "water_41": {"Color": 204},
+        "water_42": {"Color": 208},
+        "water_43": {"Color": 212},
+        "water_44": {"Color": 216},
+        "water_45": {"Color": 220},
+        "water_46": {"Color": 224},
+        "water_47": {"Color": 228},
+        "water_48": {"Color": 232},
+        "water_49": {"Color": 236}
+      }
+    },
+    {
+      "type": "options",
+      "attribute": "x_color_change",
+      "values": {
+        "rgb": {"Color": 36},
+        "original": {"Color": 40}
+      }
+    },
+    {
+      "type": "options",
+      "attribute": "color_effect",
+      "values": {
+        "jump": {"Color": 32},
+        "gradient": {"Color": 240}
+      },
+      "comment": "jump is the \"colourful change\" (assumed: see the profile's helpWanted); no fade on this laser; none leaves the channel to color"
+    },
+    {
+      "type": "options",
+      "attribute": "color",
+      "values": {
+        "white": {"Color": 4},
+        "red": {"Color": 8},
+        "yellow": {"Color": 12},
+        "green": {"Color": 16},
+        "cyan": {"Color": 20},
+        "blue": {"Color": 24},
+        "magenta": {"Color": 28},
+        "original": {"Color": 1}
+      }
+    },
+    {
+      "type": "direction",
+      "attribute": "color_speed",
+      "channel": "Color Speed",
+      "forward": 4,
+      "reverse": 128,
+      "off": 0
+    },
+    {
+      "type": "linear",
+      "attribute": "x_bright_scan",
+      "channel": "Scan Speed",
+      "segment": 0,
+      "zero": "release"
+    },
+    {
+      "type": "selected",
+      "selector": "draw_style",
+      "default": "line",
+      "choices": {
+        "line": {"type": "linear", "attribute": "scan_speed", "channel": "Scan Speed", "segment": 64},
+        "dots": {"type": "linear", "attribute": "scan_speed", "channel": "Scan Speed", "segment": 128}
+      }
+    },
+    {
+      "type": "linear",
+      "attribute": "strobe",
+      "channel": "Strobe",
+      "segment": 1,
+      "zero": 0
+    },
+    {
+      "type": "direction",
+      "attribute": "spin_z",
+      "channel": "Rotation Z",
+      "forward": 128,
+      "reverse": 192,
+      "comment": "At 0 the channel goes to rot_z"
+    },
+    {
+      "type": "linear",
+      "attribute": "rot_z",
+      "channel": "Rotation Z",
+      "segment": 0
+    },
+    {
+      "type": "direction",
+      "attribute": "spin_x",
+      "channel": "Rotation X",
+      "forward": 128,
+      "reverse": 192
+    },
+    {
+      "type": "linear",
+      "attribute": "rot_x",
+      "channel": "Rotation X",
+      "segment": 0
+    },
+    {
+      "type": "direction",
+      "attribute": "spin_y",
+      "channel": "Rotation Y",
+      "forward": 128,
+      "reverse": 192
+    },
+    {
+      "type": "linear",
+      "attribute": "rot_y",
+      "channel": "Rotation Y",
+      "segment": 0
+    },
+    {
+      "type": "selected",
+      "selector": "x_move_style",
+      "default": "wrap",
+      "choices": {
+        "wrap": {
+          "type": "direction",
+          "attribute": "move_x",
+          "channel": "Horizontal Movement",
+          "forward": 128,
+          "reverse": 160
+        },
+        "gap": {
+          "type": "direction",
+          "attribute": "move_x",
+          "channel": "Horizontal Movement",
+          "forward": 192,
+          "reverse": 224
+        }
+      },
+      "comment": "+ scrolls inner → outer, − outer → inner; at 0 the channel goes to x_shift_x"
+    },
+    {
+      "type": "bipolar",
+      "attribute": "x_shift_x",
+      "channel": "Horizontal Movement",
+      "segment": 1,
+      "centre": 64
+    },
+    {
+      "type": "selected",
+      "selector": "x_move_style",
+      "default": "wrap",
+      "choices": {
+        "wrap": {
+          "type": "direction",
+          "attribute": "move_y",
+          "channel": "Vertical Movement",
+          "forward": 128,
+          "reverse": 160
+        },
+        "gap": {
+          "type": "direction",
+          "attribute": "move_y",
+          "channel": "Vertical Movement",
+          "forward": 192,
+          "reverse": 224
+        }
+      }
+    },
+    {
+      "type": "bipolar",
+      "attribute": "x_shift_y",
+      "channel": "Vertical Movement",
+      "segment": 1,
+      "centre": 64
+    },
+    {
+      "type": "linear",
+      "attribute": "x_zoom_pulse_2",
+      "channel": "Zoom",
+      "segment": 224,
+      "zero": "release"
+    },
+    {
+      "type": "selected",
+      "selector": "zoom_style",
+      "default": "shrink",
+      "choices": {
+        "shrink": {
+          "type": "linear",
+          "attribute": "zoom_motion",
+          "channel": "Zoom",
+          "segment": 128,
+          "zero": "release"
+        },
+        "grow": {
+          "type": "linear",
+          "attribute": "zoom_motion",
+          "channel": "Zoom",
+          "segment": 160,
+          "zero": "release"
+        },
+        "pulse": {
+          "type": "linear",
+          "attribute": "zoom_motion",
+          "channel": "Zoom",
+          "segment": 192,
+          "zero": "release"
+        }
+      },
+      "comment": "At 0 the channel goes to zoom"
+    },
+    {
+      "type": "linear",
+      "attribute": "zoom",
+      "channel": "Zoom",
+      "segment": 0,
+      "invert": true,
+      "comment": "The channel runs full size (0) → a dot (127)"
+    },
+    {
+      "type": "linear",
+      "attribute": "gradient_speed",
+      "channel": "Gradient Speed",
+      "segment": 1,
+      "zero": 0
+    },
+    {
+      "type": "linear",
+      "attribute": "wave_x",
+      "channel": "Wave",
+      "segment": 1,
+      "zero": "release",
+      "comment": "One wave at a time: wave_x wins while above 0"
+    },
+    {
+      "type": "linear",
+      "attribute": "wave_y",
+      "channel": "Wave",
+      "segment": 128,
+      "zero": "release"
+    }
+  ],
+  "patterns": {
+    "channels": ["Pattern Group", "Pattern Selection"],
+    "none": {"Pattern Selection": 0},
+    "library": []
+  }
+}

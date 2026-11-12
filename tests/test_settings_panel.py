@@ -142,3 +142,26 @@ def test_long_dmx_status_is_shortened_with_full_tooltip(panel):
 def test_dmx_status_defaults_to_off(panel):
     panel.set_dmx_status()
     assert panel._dmx_val.text() == 'Off'
+
+
+def test_clip_badge_follows_clipping(panel):
+    assert panel._clip_lbl.property('state') == 'off'
+    panel.set_level(1.0, clipping=True)
+    assert panel._clip_lbl.property('state') == 'on'
+    panel.set_level(0.5)
+    assert panel._clip_lbl.property('state') == 'off'
+
+
+def test_only_the_status_dots_carry_inline_styles(panel):
+    from PyQt5.QtWidgets import QWidget
+    dots = {panel._audio_dot, panel._midi_dot, panel._dmx_dot}
+    styled = [w for w in panel.findChildren(QWidget) if w.styleSheet() and w not in dots]
+    assert styled == [] and not panel.styleSheet()
+
+
+def test_long_names_keep_the_full_name_as_tooltip(panel):
+    from PyQt5.QtCore import Qt
+    long_name = 'Focusrite USB Audio (Scarlett 2i2 4th Gen)'
+    panel.set_audio_devices([(0, long_name)], current_index=0)
+    assert panel._device_combo.itemData(0, Qt.ToolTipRole) == long_name
+    assert panel._device_combo.full_text() == long_name

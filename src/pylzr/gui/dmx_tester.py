@@ -6,32 +6,16 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from ..core import DMX_CHANNELS
 from . import style, theme
+from .widgets import set_role
 
 MAX_SHOWN     = 32   # sliders shown at once
 DEFAULT_SHOWN = 16
 
-# The faders use the app-wide slider look (gui/style.py); the warning is an amber strip
+# The faders, number boxes, button, header labels and warning use the app-wide
+# look and style roles (gui/style.py); only the channel numbers are styled here
 _WINDOW_STYLE = (
-    f'QWidget#DMXTester {{ background: {theme.BG}; }}'
-    f'QLabel {{ color: {theme.TEXT_DIM}; font-size: {theme.SIZE_LABEL}px; }}'
-    'QLabel#Warning {'
-    f'  color: {theme.WARN}; background: {style.mix(theme.WARN, theme.BG, 0.07)};'
-    f'  border: 1px solid {style.mix(theme.WARN, theme.BG, 0.25)}; border-radius: {theme.RADIUS}px;'
-    '  padding: 5px 10px;'
-    '}'
-    f'QLabel#Channel {{ color: {theme.TEXT_DIM}; font-family: "{theme.MONO_FONT}"; font-weight: bold; }}'
-    'QSpinBox {'
-    f'  background: {theme.RAISED}; color: {theme.TEXT};'
-    f'  border: 1px solid {theme.BORDER_STRONG}; border-radius: {theme.RADIUS}px;'
-    f'  padding: 1px 3px; font-family: "{theme.MONO_FONT}"; font-size: {theme.SIZE_LABEL}px;'
-    '}'
-    f'QSpinBox:hover, QSpinBox:focus {{ border-color: {theme.ACCENT}; }}'
-    'QPushButton {'
-    f'  background: {theme.BUTTON}; color: {theme.TEXT}; font-size: {theme.SIZE_LABEL}px;'
-    f'  border: 1px solid {theme.BORDER_STRONG}; border-radius: {theme.RADIUS}px; padding: 3px 10px;'
-    '}'
-    f'QPushButton:hover {{ border-color: {theme.ACCENT}; }}'
-    f'QPushButton:pressed {{ background: {theme.RAISED}; }}'
+    f'QLabel#Channel {{ color: {theme.TEXT_DIM}; font-family: "{theme.MONO_FONT}";'
+    f' font-size: {theme.SIZE_LABEL}px; font-weight: bold; }}'
 )
 
 
@@ -42,7 +26,14 @@ def _number_box(low: int, high: int, value: int, width: int) -> QSpinBox:
     box.setButtonSymbols(QAbstractSpinBox.NoButtons)
     box.setAlignment(Qt.AlignCenter)
     box.setFixedWidth(width)
+    set_role(box, 'input')
     return box
+
+
+def _header_label(text: str) -> QLabel:
+    lbl = QLabel(text)
+    set_role(lbl, 'label', tone='light')
+    return lbl
 
 
 class DMXTesterWindow(QWidget):
@@ -69,7 +60,6 @@ class DMXTesterWindow(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent, Qt.Tool)
         self.setObjectName('DMXTester')
-        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(_WINDOW_STYLE)
         self.setWindowTitle('DMX Channel Tester')
         style.dark_title_bar(self)                 # Windows only; no-op elsewhere
@@ -85,6 +75,7 @@ class DMXTesterWindow(QWidget):
 
         warning = QLabel('Values go out live. Keep the laser aimed safely before moving a slider.')
         warning.setObjectName('Warning')
+        set_role(warning, 'warning')
         root.addWidget(warning)
 
         self._strip = QGridLayout()
@@ -111,12 +102,13 @@ class DMXTesterWindow(QWidget):
 
         self._zero_btn = QPushButton('All 0')
         self._zero_btn.setToolTip('Every shown channel to 0')
+        set_role(self._zero_btn, 'small-button')
         self._zero_btn.clicked.connect(self.zero_all)
 
-        row.addWidget(QLabel('Start channel'))
+        row.addWidget(_header_label('Start channel'))
         row.addWidget(self._start_box)
         row.addSpacing(8)
-        row.addWidget(QLabel('Channels'))
+        row.addWidget(_header_label('Channels'))
         row.addWidget(self._count_box)
         row.addStretch(1)
         row.addWidget(self._zero_btn)

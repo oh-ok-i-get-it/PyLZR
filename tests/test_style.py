@@ -59,7 +59,7 @@ def test_stylesheet_is_built_from_theme_tokens():
     for token in (theme.CARD, theme.RAISED, theme.BUTTON, theme.BORDER, theme.BORDER_STRONG,
                   theme.GROOVE, theme.TEXT, theme.ACCENT, theme.MONO_FONT):   # UI_FONT is set by app.setFont()
         assert token in sheet, token
-    for widget in ('QGroupBox', 'QPushButton', 'QSlider', 'QComboBox', 'QLineEdit', 'QSpinBox',
+    for widget in ('QPushButton', 'QSlider', 'QComboBox', 'QLineEdit', 'QSpinBox',
                    'QTextEdit', 'QScrollBar', 'QMenu', 'QToolTip'):
         assert widget + ' ' in sheet or widget + ':' in sheet or widget + ',' in sheet, widget
 
@@ -127,3 +127,27 @@ def test_main_window_builds_and_works_styled(styled_app, make_window):
     controls._sm_button.click()
     assert controls._sm_button.text() == 'Sound Mode: ON'
     assert controls.status_label.text() == 'Press any key'
+
+
+def test_colours_live_in_theme():
+    """Hex colours are defined once, in gui/theme.py; other GUI modules use its tokens."""
+    import re
+    from pathlib import Path
+
+    import pylzr.gui
+    hex_colour = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
+    gui = Path(pylzr.gui.__file__).parent
+    found = {f'{path.name}: {match}'
+             for path in gui.glob('*.py') if path.name != 'theme.py'
+             for match in hex_colour.findall(path.read_text(encoding='utf-8'))}
+    assert found == set()
+
+
+def test_text_is_medium_weight_in_both_fonts(styled_app):
+    """Body text is Medium (titles set their own weights), and both bundled
+    families really have a Medium face, so nothing is faked or falls back."""
+    from PyQt5.QtGui import QFont
+    assert styled_app.font().weight() == style.text_weight() == QFont.Medium
+    db = QFontDatabase()
+    for family in (theme.UI_FONT, theme.MONO_FONT):
+        assert 'Medium' in db.styles(family), family

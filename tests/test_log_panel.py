@@ -17,6 +17,21 @@ def test_averages_panel_keeps_most_recent_rows(qapp):
         panel.append_avgs(float(i), float(i) * 10)
     lines = panel._text.toPlainText().splitlines()
     assert len(lines) == _AVG_ROWS
-    # newest last; plain text collapses the HTML padding, so compare tokens
-    assert lines[0].split() == ['L', '5.0000', 'H', '50.0000']
-    assert lines[-1].split()[:2] == ['L', f'{_AVG_ROWS + 4}.0000']
+    # newest last, as whole numbers
+    assert lines[0].split() == ['L', '5', 'H', '50']
+    assert lines[-1].split()[:2] == ['L', f'{_AVG_ROWS + 4}']
+
+
+def test_panels_are_cards_with_dim_titles(qapp):
+    from pylzr.gui.widgets import Card
+    for panel, title in ((LogPanel(), 'CONSOLE'), (AvgPanel(), 'AVERAGES')):
+        assert isinstance(panel, Card)
+        assert panel.title.text() == title and panel.title.property('tone') == 'dim'
+        assert panel._text.height() == 130 and panel._text.property('role') == 'log'
+
+
+def test_averages_are_rounded_and_right_aligned(qapp):
+    panel = AvgPanel()
+    panel.append_avgs(1821.75, 629.5)
+    panel.append_avgs(64.2, 12345.4)
+    assert panel._text.toPlainText().splitlines() == ['L  1822   H   630', 'L    64   H 12345']

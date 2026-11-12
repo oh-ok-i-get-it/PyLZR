@@ -180,20 +180,19 @@ def test_missing_migration_is_an_error():
 
 def test_dumps_is_stable_and_readable():
     data = {'version': 1, 'name': 'Gruolin → 36ch', 'range': [0, 255], 'values': {'red': {'Color': 8}},
-            'list': [{'a': 1}], 'empty': {}, 'none': []}
+            'list': [{'a': 1, 'b': [2]}], 'empty': {}, 'none': []}
     assert dumps(data) == (
         '{\n'
         '  "version": 1,\n'
         '  "name": "Gruolin → 36ch",\n'
         '  "range": [0, 255],\n'
         '  "values": {\n'
-        '    "red": {\n'
-        '      "Color": 8\n'
-        '    }\n'
+        '    "red": {"Color": 8}\n'
         '  },\n'
         '  "list": [\n'
         '    {\n'
-        '      "a": 1\n'
+        '      "a": 1,\n'
+        '      "b": [2]\n'
         '    }\n'
         '  ],\n'
         '  "empty": {},\n'
@@ -203,10 +202,36 @@ def test_dumps_is_stable_and_readable():
     assert json.loads(dumps(data)) == data
 
 
-def test_long_lists_break_over_lines():
-    data = {'categories': [f'category number {i}' for i in range(6)]}
+def test_the_whole_file_is_never_one_line():
+    assert dumps({'version': 1}) == '{\n  "version": 1\n}\n'
+
+
+def test_objects_in_lists_stay_expanded_so_they_line_up():
+    text = dumps({'mappings': [{'type': 'linear'}], 'choices': {'line': {'type': 'linear'}}})
+    assert '    {\n      "type": "linear"\n    }' in text
+    assert '"line": {"type": "linear"}' in text
+
+
+def test_long_lists_fill_their_lines():
+    data = {'options': [f'water_{n}' for n in range(1, 50)]}
     text = dumps(data)
-    assert text.count('\n') == 10 and json.loads(text) == data      # '{', key, 6 items, ']', '}'
+    lines = text.splitlines()
+    assert json.loads(text) == data
+    assert lines[1] == '  "options": [' and lines[-2] == '  ]'
+    assert all(len(line) <= 100 for line in lines) and 4 < len(lines) < 12
+    assert lines[2].startswith('    "water_1", "water_2", ')
+
+
+def test_long_objects_break_over_lines():
+    data = {'values': {f'channel number {i}': i for i in range(8)}}
+    text = dumps(data)
+    assert text.count('\n') == 12 and json.loads(text) == data      # '{', key, 8 items, '}', '}'
+
+
+def test_a_value_longer_than_a_line_gets_its_own():
+    data = {'notes': ['x' * 120, 'short', 'also short']}
+    lines = dumps(data).splitlines()
+    assert lines[2] == f'    "{"x" * 120}",' and lines[3] == '    "short", "also short"'
 
 
 def test_key_order_is_kept():
