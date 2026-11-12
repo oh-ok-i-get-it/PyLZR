@@ -97,12 +97,12 @@ def test_panel_hides_debug_by_default_and_follows_level(panel):
     panel.set_level('quiet')
     log.error('quiet hides even errors')
     lines = panel_lines(panel)
-    assert [line.split(maxsplit=2)[2] for line in lines] == ['shown', 'now shown']
+    assert [line.split(maxsplit=1)[1] for line in lines] == ['shown', 'now shown']
 
 
 def test_panel_colours_by_tone_then_level(panel):
     colors = []
-    panel.log_handler.bridge.formatted.connect(lambda text, color: colors.append(color))
+    panel.log_handler.bridge.formatted.connect(lambda text, color, level: colors.append(color))
     log.info('plain')
     log.info('mode', extra={'tone': Tone.MODE})
     log.warning('careful')
@@ -116,3 +116,37 @@ def test_logging_from_another_thread_reaches_panel(panel):
     worker.start()
     worker.join()
     wait_until(lambda: any('from a worker thread' in line for line in panel_lines(panel)))
+
+
+def test_panel_lines_are_time_and_message_only(panel):
+    log.info('plain')
+    log.warning('careful')
+    for line in panel_lines(panel):
+        assert line[2] == ':' and line[8:10] == '  '            # 'HH:MM:SS  …'
+        assert '[' not in line and 'INFO' not in line and 'WARNING' not in line
+    assert panel_lines(panel)[0].endswith('  plain')
+
+
+def icon_names(panel):
+    """The inline image on each line of the panel (None for a line without one)."""
+    names = []
+    block = panel._text.document().begin()
+    while block.isValid():
+        found = None
+        it = block.begin()
+        while not it.atEnd():
+            fmt = it.fragment().charFormat()
+            if fmt.isImageFormat():
+                found = fmt.toImageFormat().name()
+            it += 1
+        names.append(found)
+        block = block.next()
+    return names
+
+
+def test_warnings_and_errors_get_an_icon_after_the_time(panel):
+    log.info('plain')
+    log.warning('careful')
+    log.error('broken')
+    assert icon_names(panel) == [None, 'pylzr-icon:triangle-alert', 'pylzr-icon:circle-x']
+    assert panel_lines(panel)[1][8:].startswith('  ￼ careful')   # the image sits after the time
