@@ -11,14 +11,15 @@ from ..analysis import BandLayout
 # drawn as separate segments: as one antialiased polyline they take ~30 ms a
 # frame instead of ~4 ms.
 _BAND_COLOURS = (theme.LOW_BAND, theme.MID_BAND, theme.HIGH_BAND, theme.TOP_BAND)
-_LINE_W       = 1.5                                  # waveform and spectrum curves, px
+_LINE_W       = 1.5                                  # spectrum curve, px
+_WAVE_W       = 1.2                                  # waveform curve, px: thinner keeps its dense detail crisp
 _FILLED       = (theme.LOW_BAND, theme.HIGH_BAND)   # the analysed bands get a fill that fades downwards
 _FILL_TOP_ALPHA = 0.22                               # at the top of the plot; 0 turns the fill off
 _SPEC_Y       = (-4, 0)                              # spectrum view, log10 units: 1e-4 … 1
 
 # Gentle display smoothing (see _soften), in log10 units like the plot
-_SMOOTH_OCTAVE = 1 / 48    # each bin averaged with its neighbours within ± this many octaves
-_FALL_PER_FRAME = 0.05     # how far a level may drop per frame, in decades (rises are instant)
+_SMOOTH_OCTAVE = 1 / 32    # each bin averaged with its neighbours within ± this many octaves
+_FALL_PER_FRAME = 0.04     # how far a level may drop per frame, in decades (rises are instant)
 _FLOOR          = 1e-12    # levels below this count as this (log10 of 0 is -inf)
 _TITLE_TRACKING = 1.5    # px between title letters, like the small-caps titles elsewhere
 _ROW_STRETCH  = (1, 2)   # waveform : spectrum height
@@ -129,7 +130,7 @@ class SpectrumWidget(QWidget):
         for row, stretch in zip((1, 2), _ROW_STRETCH, strict=True):
             grid.setRowStretchFactor(row, stretch)
 
-        self._waveform_line = self._curve(self.waveform, theme.ACCENT)
+        self._waveform_line = self._curve(self.waveform, theme.ACCENT, width=_WAVE_W)
         # low, mid, high, top (not analysed); the fill reaches down to the bottom of the view
         self._spectrum_lines = []
         for colour in _BAND_COLOURS:
@@ -138,10 +139,10 @@ class SpectrumWidget(QWidget):
         self._spectrum_x = self._drawn(self._bands.split(self._bands.freqs))
 
     @staticmethod
-    def _curve(plot, colour: str, fill: QBrush | None = None) -> pg.PlotDataItem:
-        """A _LINE_W curve drawn as segments (see _LINE_W). Flat caps: round ones
+    def _curve(plot, colour: str, fill: QBrush | None = None, width: float = _LINE_W) -> pg.PlotDataItem:
+        """A curve `width` px wide, drawn as segments (see _LINE_W). Flat caps: round ones
         look the same at this width but cost ~2.5 ms more a frame."""
-        pen = pg.mkPen(colour, width=_LINE_W)
+        pen = pg.mkPen(colour, width=width)
         pen.setCapStyle(Qt.FlatCap)
         item = plot.plot(pen=pen, fillLevel=_SPEC_Y[0] if fill else None, brush=fill)
         item.curve.setSegmentedLineMode('on')

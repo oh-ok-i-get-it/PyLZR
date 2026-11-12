@@ -81,9 +81,11 @@ def test_spectrum_axes_label_both_ends(widget):
 
 
 def test_curves_are_thicker_and_drawn_as_segments(widget):
-    from pylzr.gui.spectrum_widget import _LINE_W
+    from pylzr.gui.spectrum_widget import _LINE_W, _WAVE_W
+    assert widget._waveform_line.opts['pen'].widthF() == _WAVE_W > 1
+    for item in widget._spectrum_lines:
+        assert item.opts['pen'].widthF() == _LINE_W > _WAVE_W     # the spectrum line is the heavier one
     for item in (widget._waveform_line, *widget._spectrum_lines):
-        assert item.opts['pen'].widthF() == _LINE_W > 1
         assert item.curve.opts['segmentedLineMode'] == 'on'     # wide antialiased polylines are slow
 
 
