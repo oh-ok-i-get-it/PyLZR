@@ -127,3 +127,17 @@ def test_main_window_builds_and_works_styled(styled_app, make_window):
     controls._sm_button.click()
     assert controls._sm_button.text() == 'Sound Mode: ON'
     assert controls.status_label.text() == 'Press any key'
+
+
+def test_colours_live_in_theme():
+    """Hex colours are defined once, in gui/theme.py; other GUI modules use its tokens."""
+    import re
+    from pathlib import Path
+
+    import pylzr.gui
+    hex_colour = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
+    gui = Path(pylzr.gui.__file__).parent
+    found = {f'{path.name}: {match}'
+             for path in gui.glob('*.py') if path.name != 'theme.py'
+             for match in hex_colour.findall(path.read_text(encoding='utf-8'))}
+    assert found == set()

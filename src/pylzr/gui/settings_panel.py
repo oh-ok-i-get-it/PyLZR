@@ -18,7 +18,7 @@ _IND_ON      = f'border-radius:5px; background:{theme.OK};'
 _IND_SENT    = f'border-radius:5px; background:{theme.ACCENT};'
 _IND_WARN    = f'border-radius:5px; background:{theme.WARN};'
 _IND_OFF     = f'border-radius:5px; background:{theme.ERROR};'
-_IND_NA      = 'border-radius:5px; background:#383838;'
+_IND_NA      = f'border-radius:5px; background:{theme.DOT_OFF};'
 
 # DMXOutput status state -> indicator: green once the node answers, blue
 # while sending without an answer (some nodes never answer; not an error)

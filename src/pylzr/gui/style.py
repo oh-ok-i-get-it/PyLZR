@@ -56,7 +56,7 @@ _DARK_MODE_ATTRIBUTES = (20, 19)
 
 
 def rgba(hex_color: str, alpha: float) -> str:
-    """'#58a6ff', 0.2 -> 'rgba(88, 166, 255, 0.2)' for tinted fills in stylesheets."""
+    """rgba(theme.ACCENT, 0.2) -> 'rgba(88, 166, 255, 0.2)', for tinted fills in stylesheets."""
     c = QColor(hex_color)
     return f'rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})'
 
@@ -205,7 +205,7 @@ def palette() -> QPalette:
         (QPalette.PlaceholderText, theme.TEXT_MUTED),
         (QPalette.Button,          theme.BUTTON),
         (QPalette.ButtonText,      theme.TEXT),
-        (QPalette.BrightText,      '#ffffff'),
+        (QPalette.BrightText,      theme.WHITE),
         (QPalette.ToolTipBase,     theme.RAISED),
         (QPalette.ToolTipText,     theme.TEXT),
         (QPalette.Highlight,       theme.ACCENT),
@@ -290,8 +290,8 @@ QTextEdit, QPlainTextEdit {{
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 0; }}
-QScrollBar::handle {{ background: #333333; border-radius: 3px; margin: 2px; }}
-QScrollBar::handle:hover {{ background: #444444; }}
+QScrollBar::handle {{ background: {t.SCROLL_HANDLE}; border-radius: 3px; margin: 2px; }}
+QScrollBar::handle:hover {{ background: {t.SCROLL_HOVER}; }}
 QScrollBar::handle:vertical {{ min-height: 24px; }}
 QScrollBar::handle:horizontal {{ min-width: 24px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
@@ -366,7 +366,7 @@ QLabel[role="clip"] {{
     border-radius: 3px; font-family: "{t.MONO_FONT}"; font-size: 8px; font-weight: bold; padding: 1px 3px;
     background: {t.RAISED}; color: {t.DISABLED};
 }}
-QLabel[role="clip"][state="on"] {{ background: {t.ERROR}; color: #ffffff; }}
+QLabel[role="clip"][state="on"] {{ background: {t.ERROR}; color: {t.WHITE}; }}
 QLabel[role="status"] {{ color: {t.TEXT_MUTED}; font-size: {t.SIZE_LABEL}px; }}
 
 QPushButton[role="sound-mode"] {{
@@ -376,7 +376,7 @@ QPushButton[role="sound-mode"] {{
 }}
 QPushButton[role="sound-mode"]:hover {{ border-color: {t.HOVER_EDGE}; }}
 QPushButton[role="sound-mode"]:checked {{
-    background: {mix(t.OK, t.BG, 0.09)}; color: {mix(t.OK, '#ffffff', 0.5)};
+    background: {mix(t.OK, t.BG, 0.09)}; color: {mix(t.OK, t.WHITE, 0.5)};
     border-color: {mix(t.OK, t.BG, 0.55)};
 }}
 QPushButton[role="sound-mode"]:checked:hover {{ border-color: {t.OK}; }}

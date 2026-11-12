@@ -1,4 +1,5 @@
-# Colors shared across GUI panels. Panel-specific shades stay in their modules.
+# Every colour of the GUI, plus fonts and layout metrics. Other gui/ modules use
+# these tokens instead of hex values (tests/test_style.py checks).
 import logging
 
 from ..core.app_logger import Tone
@@ -24,8 +25,12 @@ TEXT          = '#e6e8eb'   # values, button text
 TEXT_DIM      = '#9aa0a6'   # labels
 TEXT_MUTED    = '#5f6368'   # hints, status line
 DISABLED      = '#444444'   # disabled text
+WHITE         = '#ffffff'   # text on a solid colour (CLIP on), and for mixing lighter shades
 OK_TINT       = '#0b2416'   # background of a small button that is on (OK green over black)
 DIVIDER       = '#1e1e1e'   # 1 px lines between settings sections
+DOT_OFF       = '#383838'   # a status dot with nothing to report (DMX off)
+SCROLL_HANDLE = '#333333'   # scroll bar handle
+SCROLL_HOVER  = '#444444'   # scroll bar handle under the mouse
 AXIS          = '#7d838b'   # plot tick labels
 AXIS_LINE     = '#3a3a3a'   # plot axis lines
 GRID          = '#5a5a5a'   # plot grid pen (pyqtgraph's GridItem draws it much fainter)
@@ -59,7 +64,7 @@ PLOT_AXIS_W = 52    # left axis width, the same on both plots so they line up
 LOG_TONES = {
     Tone.ON:     OK,
     Tone.OFF:    ERROR,
-    Tone.MODE:   '#ffffff',
+    Tone.MODE:   WHITE,
     Tone.KEY:    '#00bcd4',
     Tone.MUTED:  '#8a8a8a',
     Tone.NOTICE: WARN,
