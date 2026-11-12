@@ -19,6 +19,13 @@ fixture can't use — another laser's x_ extras, a layer it doesn't have, a
 choice none of its mappings offers (color_effect 'fade' on the Gruolin) —
 are skipped and reported as unsupported, never an error. A wrong value for
 an attribute it does have (size 2) is a bug in the caller: ValueError.
+
+Raw patterns (testers and the pattern browser only): render() can also be
+given a layer's pattern-channel values directly (raw_patterns), to look at
+patterns nobody has tagged yet. Content never does this: it asks for
+patterns by category and scales, which is what keeps it portable. Raw values
+are checked like a binding's: on a capability the profile describes, never
+Maintenance.
 """
 
 from collections.abc import Mapping
@@ -27,12 +34,49 @@ from types import MappingProxyType
 from typing import Any
 
 from .attributes import DEFAULT_LAYER, AttrKey, AttributeSet, Kind
-from .binding import Binding, ResolvedBinding
+from .binding import Binding, ResolvedBinding, check_value
+from .errors import BindingError
 from .mappings import OFF_CHOICES, AttributeMapping
-from .ofl import Profile
-from .patterns import PatternEntry, PatternMapping
+from .ofl import Capability, Profile
+from .patterns import PatternEntry, PatternLibrary, PatternMapping
 
 State = Mapping['AttrKey | str', Any]
+RawPatterns = Mapping[str, Mapping[str, int]]      # layer → {pattern channel (layer a's name) → DMX value}
+
+
+@dataclass(frozen=True)
+class Segment:
+    """A run of DMX values on a channel that does one thing, e.g. 16–31
+    'Line patterns, folder 2'."""
+
+    start: int
+    end:   int
+    label: str
+
+    def contains(self, value: int) -> bool:
+        return self.start <= value <= self.end
+
+
+@dataclass(frozen=True)
+class PatternChannel:
+    """One pattern channel on one layer: the segments a raw pattern may set it to."""
+
+    name:     str                      # layer a's channel name, e.g. 'Pattern Group'
+    segments: tuple[Segment, ...]
+
+    def allows(self, value: int) -> bool:
+        return any(segment.contains(value) for segment in self.segments)
+
+
+def _label(capability: Capability) -> str:
+    """A short name for a segment: its effect name, else the first part of its
+    comment, else its type."""
+    name = capability.properties.get('effectName')
+    if isinstance(name, str) and name:
+        return name
+    if capability.comment:
+        return capability.comment.split(':')[0].strip()
+    return capability.type
 
 
 @dataclass(frozen=True)
@@ -71,6 +115,8 @@ class Renderer:
                 offsets = {name: mode.offset(resolved.channel(name, layer)) for name in mapping.channels}
                 slots.append(_Slot(mapping, layer, MappingProxyType(offsets)))
         self._slots = tuple(slots)
+        patterns = next((m for m in resolved.mappings if isinstance(m, PatternMapping)), None)
+        self._library = None if patterns is None else patterns.library
         choices: dict[AttrKey, frozenset[str]] = {}
         for slot in slots:
             for name in slot.mapping.attributes:
@@ -116,9 +162,60 @@ class Renderer:
         """The choices of an option attribute this fixture has mappings for."""
         return self._choices.get(AttrKey.parse(key), frozenset())
 
+    @property
+    def library(self) -> PatternLibrary | None:
+        """The fixture's pattern library (None if its binding has no patterns)."""
+        return self._library
+
+    def pattern_channels(self, layer: str = DEFAULT_LAYER) -> tuple[PatternChannel, ...]:
+        """The pattern channels on `layer`, with the segments a raw pattern may
+        use there (every described one except Maintenance). Empty if the
+        binding has no patterns."""
+        if self._library is None:
+            return ()
+        result = []
+        for name in self._library.channels:
+            channel = self.resolved.profile.channels[self.resolved.channel(name, layer)]
+            segments = tuple(Segment(cap.start, cap.end, _label(cap)) for cap in channel.capabilities
+                             if cap.type != 'Maintenance')
+            result.append(PatternChannel(name, segments))
+        return tuple(result)
+
+    def _raw_values(self, raw_patterns: RawPatterns) -> dict[str, dict[str, int]]:
+        """raw_patterns checked, each layer's values complete (missing
+        channels: the library's "no pattern" value, else the channel's default)."""
+        if raw_patterns and self._library is None:
+            raise ValueError(f'{self.name} has no pattern channels')
+        checked = {}
+        for layer, values in raw_patterns.items():
+            if layer not in self.layers:
+                raise ValueError(f'{self.name} has no layer "{layer}"')
+            unknown = [name for name in values if name not in self._library.channels]
+            if unknown:
+                raise ValueError(f'"{unknown[0]}" is not a pattern channel of {self.name} '
+                                 f'({", ".join(self._library.channels)})')
+            complete = {}
+            for name in self._library.channels:
+                key = self.resolved.channel(name, layer)
+                default = self._defaults[self.resolved.mode.offset(key)]
+                value = values.get(name, self._library.none.get(name, default))
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise ValueError(f'"{name}" needs a DMX value, not {value!r}')
+                try:
+                    check_value(self.resolved.profile.channels[key], value, off=True)
+                except BindingError as e:
+                    raise ValueError(e.message) from None
+                complete[name] = value
+            checked[layer] = complete
+        return checked
+
     # ── Rendering ───────────────────────────────────────────────────────
 
-    def render(self, state: State) -> Render:
+    def render(self, state: State, raw_patterns: RawPatterns = MappingProxyType({})) -> Render:
+        """The channel values for `state`. `raw_patterns` (testers only, see
+        the module docstring) sets layers' pattern channels directly; a
+        pattern request on such a layer is then ignored."""
+        raw = self._raw_values(raw_patterns)
         per_layer: dict[str, dict[str, Any]] = {layer: {} for layer in self.layers}
         used: list[AttrKey] = []
         unsupported: list[AttrKey] = []
@@ -144,12 +241,22 @@ class Renderer:
         patterns: dict[str, PatternEntry | None] = {}
         for slot in self._slots:
             layer_values = per_layer[slot.layer]
+            if isinstance(slot.mapping, PatternMapping) and slot.layer in raw:
+                patterns[slot.layer] = slot.mapping.library.find(raw[slot.layer])
+                for channel, value in raw[slot.layer].items():   # patterns come first: nothing has claimed these
+                    claimed.add(slot.offsets[channel])
+                    values[slot.offsets[channel]] = value
+                lost.add(AttrKey('pattern', slot.layer))         # a request on this layer loses to the raw values
+                continue
             if isinstance(slot.mapping, PatternMapping):
                 patterns[slot.layer] = slot.mapping.chosen(layer_values)
-            if not slot.mapping.active(layer_values):
+                rendered = slot.mapping.render(layer_values)
+            elif slot.mapping.active(layer_values):
+                rendered = slot.mapping.render(layer_values)
+            else:
                 continue
             beaten = False
-            for channel, value in slot.mapping.render(layer_values).items():
+            for channel, value in rendered.items():
                 offset = slot.offsets[channel]
                 if offset in claimed:
                     beaten = True

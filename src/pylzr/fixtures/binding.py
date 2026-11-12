@@ -234,7 +234,7 @@ def _shift(mode: Mode, layers: Mapping[str, int], name: str, layer: str) -> str 
     return mode.channels[index] if index < mode.footprint else None
 
 
-def _check_value(channel: Channel, value: int, off: bool, where: str = ''):
+def check_value(channel: Channel, value: int, off: bool, where: str = ''):
     """The safety rules for sending `value` on `channel` (`off`: it means "off")."""
     segment = channel.capability_at(value)
     if segment is None:
@@ -273,7 +273,7 @@ class _Layout:
                     raise BindingError(f'"{channel.key}" (layer {layer}) has different segments from "{name}" '
                                        '(check "layers")')
                 for value in sorted(values):
-                    _check_value(channel, value, value in off.get(name, ()))
+                    check_value(channel, value, value in off.get(name, ()))
 
 
 def _segments(channel: Channel) -> list[tuple[int, int, str]]:
@@ -308,11 +308,11 @@ def _check_patterns(library: PatternLibrary, layout: _Layout) -> PatternMapping:
     for layer in layout.layers:
         for name, value in library.none.items():
             where = f'patterns.none.{name}'
-            _check_value(layout.on_layer(name, layer, where), value, True, where)
+            check_value(layout.on_layer(name, layer, where), value, True, where)
         for i, entry in enumerate(library.entries):
             for name, value in entry.values.items():
                 where = f'patterns.library[{i}].values.{name}'
-                _check_value(layout.on_layer(name, layer, where), value, False, where)
+                check_value(layout.on_layer(name, layer, where), value, False, where)
     return PatternMapping(library)
 
 
@@ -329,7 +329,7 @@ def _resolve(binding: Binding, profile: Profile) -> ResolvedBinding:
 
     for name, value in binding.base.items():
         where = join_where('base', name)
-        _check_value(find_channel(channels, name, where), value, True, where)
+        check_value(find_channel(channels, name, where), value, True, where)
 
     mappings: list[AttributeMapping] = []
     layered: list[bool] = []

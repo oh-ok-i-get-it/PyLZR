@@ -181,3 +181,8 @@ def test_a_fixture_with_a_problem_is_kept_listed_but_not_rendered():
     with pytest.raises(KeyError, match='no fixture called "Nope"'):
         r.render({'Nope': {}})
     assert r.renderer('a') is renderer()
+
+
+def test_render_fixture_passes_raw_patterns_through():
+    start, result = rig().render_fixture('laser r', {}, {'b': {'Pattern Group': 16, 'Pattern Selection': 2}})
+    assert start == 37 and result.values[19:21] == bytes([16, 2])

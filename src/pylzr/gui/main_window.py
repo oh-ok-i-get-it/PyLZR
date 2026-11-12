@@ -308,6 +308,8 @@ class MainWindow(QWidget):
         fixtures.set_patch(library.patch, library.rig().problems)
         problems = [str(problem) for problem in library.problems]
         fixtures.set_file_problems(problems)
+        if self._dmx_tester is not None:
+            self._dmx_tester.attributes.set_rig(library.rig(), library.vocabulary)
         for problem in problems:
             if problem not in self._logged_fixture_problems:
                 self._logged_fixture_problems.add(problem)
@@ -338,6 +340,7 @@ class MainWindow(QWidget):
             tester.channels_changed.connect(self.dmx_out.set_test_values)
             tester.closed.connect(self.dmx_out.clear_test_values)
             self._dmx_tester = tester
+            tester.attributes.set_rig(self.library.rig(), self.library.vocabulary)
         self._dmx_tester.show()
         self._dmx_tester.raise_()
         self._dmx_tester.activateWindow()

@@ -33,7 +33,7 @@ def test_starts_at_channel_1_with_16_dark_channels(tester, channels):
     assert channels.values == [0] * 16
     assert [label.text() for label in channels._channel_labels][:3] == ['1', '2', '3']
     assert tester.windowFlags() & Qt.WindowType_Mask == Qt.Tool   # a tool window, not a plain one
-    assert 'live' in tester.findChild(type(channels._channel_labels[0]), 'Warning').text()
+    assert 'live' in channels.findChild(type(channels._channel_labels[0]), 'Warning').text()
 
 
 def test_slider_reports_every_shown_channel(tester, received, channels):
@@ -113,9 +113,9 @@ def test_closing_reports_and_reopens_dark(tester, received, channels):
 
 def test_header_labels_are_light_and_the_warning_has_its_role(tester):
     from PyQt5.QtWidgets import QLabel
-    light = [lbl.text() for lbl in tester.findChildren(QLabel) if lbl.property('tone') == 'light']
+    light = [lbl.text() for lbl in tester.channels.findChildren(QLabel) if lbl.property('tone') == 'light']
     assert light == ['Start channel', 'Channels']
-    assert tester.findChild(QLabel, 'Warning').property('role') == 'warning'
+    assert tester.channels.findChild(QLabel, 'Warning').property('role') == 'warning'
 
 
 # ── Tabs ─────────────────────────────────────────────────────────────────
@@ -143,8 +143,8 @@ def fake(tester):
     return tab
 
 
-def test_channels_is_the_first_tab(tester):
-    assert tester.tabs() == ['Channels'] and tester._current() is tester.channels
+def test_channels_then_attributes(tester):
+    assert tester.tabs() == ['Channels', 'Attributes'] and tester._current() is tester.channels
 
 
 def test_only_the_visible_tab_drives_the_output(tester, received, channels, fake):
@@ -183,7 +183,7 @@ def test_styled_window_keeps_the_page_as_it_was(styled_app):
     window = DMXTesterWindow()
     window.show()
     assert all(f'QTabBar::tab{state}' in style.stylesheet() for state in ('', ':hover', ':selected'))
-    assert window._tabs.tabBar().isVisible() and window.tabs() == ['Channels']
+    assert window._tabs.tabBar().isVisible() and window.tabs() == ['Channels', 'Attributes']
     assert min(slider.height() for slider in window.channels._sliders) >= 140   # the faders keep their length
     window.close()
     window.deleteLater()

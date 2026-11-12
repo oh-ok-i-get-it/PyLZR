@@ -2,15 +2,19 @@ from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 from PyQt5.QtCore import Qt, pyqtSignal
 
 from . import style
+from .attribute_tester import AttributeTester
 from .channel_tester import ChannelTester
 
 TAB_GAP    = 10   # between the tab bar's line and the page
 TAB_HEIGHT = 36   # what the tab bar adds to the window (its height + the gap under it)
+HEIGHT     = 600  # room for the Attributes grid (the Channels faders just get longer)
 
 
 class DMXTesterWindow(QWidget):
     """A small tool window for trying out fixtures, one tab per way of
-    testing. Today: Channels (one slider per DMX channel, `channels`).
+    testing: Channels (one slider per DMX channel, `channels`) and
+    Attributes (a patched fixture through its binding, `attributes`; give it
+    the patch with attributes.set_rig()).
 
     Knows nothing about DMX output: it only reports what the visible tab
     shows. Each tab has a channels_changed(int, list) signal, resend() and
@@ -45,8 +49,10 @@ class DMXTesterWindow(QWidget):
 
         self.channels = ChannelTester()
         self._add_tab(self.channels, 'Channels')
+        self.attributes = AttributeTester()
+        self._add_tab(self.attributes, 'Attributes')
 
-        self.resize(self.sizeHint().width(), 320 + TAB_HEIGHT)
+        self.resize(self.channels.sizeHint().width() + 24, HEIGHT)
 
     def _add_tab(self, tab: QWidget, title: str):
         tab.setContentsMargins(0, TAB_GAP, 0, 0)  # room between the tab bar's line and the page

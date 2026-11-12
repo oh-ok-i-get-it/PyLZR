@@ -20,12 +20,13 @@ types: what the testers and (later) scenes render through.
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from .errors import PatchError
 from .jsonio import ObjectReader, read_file, upgrade, write_file
 from .patterns import clean_name
-from .renderer import Render, Renderer, State
+from .renderer import RawPatterns, Render, Renderer, State
 from .vocabulary import MAX_NAME
 
 VERSION  = 1
@@ -219,11 +220,13 @@ class Rig:
     def renderer(self, name: str) -> Renderer:
         return self._renderers[self._usable(name).type]
 
-    def render_fixture(self, name: str, state: State) -> tuple[int, Render]:
+    def render_fixture(self, name: str, state: State,
+                       raw_patterns: RawPatterns = MappingProxyType({})) -> tuple[int, Render]:
         """(first channel, render) for one fixture: what the testers send
-        with DMXOutput.set_test_values(start, render.values)."""
+        with DMXOutput.set_test_values(start, render.values). `raw_patterns`
+        is for testers only (see renderer.py)."""
         entry = self._usable(name)
-        return entry.address, self._renderers[entry.type].render(state)
+        return entry.address, self._renderers[entry.type].render(state, raw_patterns)
 
     def render(self, states: Mapping[str, State]) -> dict[int, int]:
         """{DMX channel: value} for every usable fixture with a state; one

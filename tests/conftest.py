@@ -69,6 +69,11 @@ def _fresh_state(tmp_path):
     fake_pyaudio.reset()
     fake_udp.reset()
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / 'config'))
+    yield
+    # Widgets a test let go of with deleteLater() are deleted now: no event
+    # loop runs between tests, and left alive they pile up and slow every
+    # later stylesheet change
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 @pytest.fixture(autouse=True)

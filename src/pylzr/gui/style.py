@@ -351,6 +351,8 @@ QLabel[role="warning"] {{
     border-radius: {t.RADIUS}px; padding: 5px 10px; font-size: {t.SIZE_LABEL}px;
 }}
 QLabel[role="detail"]  {{ color: {t.TEXT}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="readout"][state="ignored"] {{ color: {t.WARN}; }}
+QComboBox[state="ignored"] {{ border-color: {t.WARN}; color: {t.WARN}; }}
 QLabel[role="problem"] {{ color: {t.WARN}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
 QLabel[role="readout"] {{
     color: {t.TEXT}; font-family: "{t.MONO_FONT}"; font-size: {t.SIZE_LABEL}px; background: transparent;
