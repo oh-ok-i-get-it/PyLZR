@@ -18,36 +18,36 @@ suggested order of attack.
 | P1 | Exception hook and emergency stop | adopted | ROADMAP D2.5; PLAN task 3; `docs/design/safety-phase.md`; `docs/plans/task-3-emergency-stop.md` | done (`efa64b9`, review follow-up `c5a2601`) | 3 |
 | P2 | Blackout before anything that can block on exit | adopted | ROADMAP D2.5; PLAN task 1; `safety-phase.md` | done (`fdf17d1`) | 1 |
 | P3 | Send the blackout three times | adopted | ROADMAP D2.5; PLAN task 2; `safety-phase.md` (Q5 assumption) | done (`25e92de`) | 2 |
-| P4 | Detect an audio stall | deferred | Out of scope in `safety-phase.md`; `d4-dynamic-sound-mode.md` says it becomes in scope there, open question Q4 | open | 6 |
+| P4 | Detect an audio stall | adopted (13 Nov; was deferred) | ROADMAP D2.5; PLAN task 6; `safety-phase.md` (Q15–Q20 decided, Q21 SPACE rule an assumption); `docs/plans/task-6-audio-stall.md`; answers `d4-dynamic-sound-mode.md` Q4; stall in DMX once scenes exist: `d3-scenes.md` Q6 | planned (plan revised 13 Nov, awaiting review) | 6 |
 | P5 | Debounced settings writes | adopted | ROADMAP D2.5; PLAN task 4; `safety-phase.md`; `docs/plans/task-4-debounced-settings.md` | done (`37c8dc0`) | 4 |
-| P6 | Start without an input device | deferred | Out of scope in `safety-phase.md` and `app-object.md` | open | 7 |
+| P6 | Start without an input device | adopted (13 Nov; was deferred) | ROADMAP D2.5; PLAN task 7; `safety-phase.md` (Q20 assumption); `app-object.md` failure modes | planned | 7 |
 | P7 | Cue logic before display redraws | adopted | ROADMAP D2.5; PLAN task 5; `safety-phase.md` | done (`211618f`) | 5 |
-| P8 | Bound the chunk queue | folded in | `d4-dynamic-sound-mode.md` (queue bound in the analysis worker, as I1 supersedes it) | planned | 8 |
+| P8 | Bound the chunk queue | folded in | ROADMAP D4 (with I1); `d4-dynamic-sound-mode.md` migration step 1 (queue bound in the analysis worker, as I1 supersedes it) | planned | 8 |
 | P9 | Commit the roadmap | adopted | `ROADMAP.md` | done (`27823d5`) | 10 |
-| P10 | Cache the fixture library per file | undecided | none | open | 19 |
-| P11 | Stop the discovery drain timer when idle | undecided | none | open | 19 |
+| P10 | Cache the fixture library per file | folded in | ROADMAP "Folded into other work": with D5 (second laser), earlier only if the Settings reload becomes noticeable | planned | 19 |
+| P11 | Stop the discovery drain timer when idle | folded in | ROADMAP "Folded into other work": D3 prep 2 (app object) | planned | 19 |
 | P12 | PyQt6 spike | adopted | ROADMAP "PyQt6 spike (before D6)" | planned | 20 |
-| P13 | Remove code used only by tests | undecided | none | open | 18 |
+| P13 | Remove code used only by tests | folded in | ROADMAP "Folded into other work": decided after component 11; what's still unused is removed in component 12 | planned | 18 |
 | I1 | Analysis worker thread | folded in | ROADMAP D4 (first component); `d4-dynamic-sound-mode.md` | planned | 14 |
 | I2 | Cue abstraction | adopted | ROADMAP D3 prep 1; `docs/design/cue-abstraction.md` | planned | 11 |
 | I3 | Non-GUI app object | adopted | ROADMAP D3 prep 2; `docs/design/app-object.md` | planned | 12 |
 | I4 | Pull-model frame clock | adopted | ROADMAP D3 prep 3; `docs/design/frame-clock.md` | planned | 13 |
-| I5 | Split `_PatternCell` out of the tester | undecided | none | open | 9 |
-| I6 | One combo helper, `ElidedLabel` for status details | undecided | none | open | 17 |
+| I5 | Split `_PatternCell` out of the tester | adopted | ROADMAP D2 remainder: component 11, part 1 | planned | 9 |
+| I6 | One combo helper, `ElidedLabel` for status details | folded in | ROADMAP "Folded into other work": component 11, part 1 (next to I5) | planned | 17 |
 | I7 | 1024-sample hop, 2048-sample window | folded in | ROADMAP D4 (second component); `d4-dynamic-sound-mode.md` | planned | 15 |
-| I8 | Benchmarks behind `PYLZR_BENCH=1` | undecided | none | open | 16 |
-| I9 | Move the pyqtgraph antialias option to `style.apply` | undecided | none | open | 17 |
-| I10 | Build `library.rig()` once per `_show_fixtures` | undecided | none (the audit says it folds into I3) | open | 17 |
+| I8 | Benchmarks behind `PYLZR_BENCH=1` | adopted | ROADMAP D4 (first, before I1 and I7, so they're measured); `d4-dynamic-sound-mode.md` migration step 0 | planned | 16 |
+| I9 | Move the pyqtgraph antialias option to `style.apply` | folded in | ROADMAP "Folded into other work": component 11, part 1 (next to I5) | planned | 17 |
+| I10 | Build `library.rig()` once per `_show_fixtures` | folded in | I3: ROADMAP D3 prep 2; `app-object.md` migration step 2 | planned | 17 |
 
 Items from section 5 (Plan changes) that are not P or I items:
 
 | # | Change | Decision | Where | Status |
 |---|---|---|---|---|
-| 1 | Insert D2.5 before component 11 | adopted, for P1, P2, P3, P5, P7 only | ROADMAP D2.5; PLAN | in progress; P4, P6, P8 not in it |
-| 2 | Component 11: do I5 first; CR011R DMX-loss hardware check | hardware check adopted; I5 undecided | PLAN "After task 5"; ROADMAP D2.5 | open |
+| 1 | Insert D2.5 before component 11 | adopted for P1, P2, P3, P5, P7, P4, P6; P8 folded into D4 | ROADMAP D2.5; PLAN tasks 1–7 | in progress: tasks 1–5 done, 6 planned, 7 next |
+| 2 | Component 11: do I5 first; CR011R DMX-loss hardware check | adopted (I5 is component 11 part 1) | PLAN "After task 7"; ROADMAP D2 remainder and D2.5 | planned |
 | 3 | Component 12 adds `docs/ROADMAP.md` | adopted | ROADMAP D2 remainder | done (`27823d5`) |
 | 4 | D3 prep first: I2, I3, I4 | adopted | ROADMAP D3 prep | planned |
-| 5 | D4 starts with I1 and I7 | adopted | ROADMAP D4 | planned |
+| 5 | D4 starts with I1 and I7 | adopted, with I8 before them | ROADMAP D4 | planned |
 | 6 | Order D3, D4, D6, D5 | adopted | ROADMAP | done in the roadmap |
 | 7 | Cut the C++ rewrite | adopted (won't do the rewrite) | ROADMAP "Cut" | done |
 | 8 | PyQt6 spike before D6 | adopted | ROADMAP | planned |

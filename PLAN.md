@@ -1,8 +1,9 @@
-# PLAN: D2.5 fail-safe output (audit P2, P3, P1, P5, P7)
+# PLAN: D2.5 fail-safe output (audit P2, P3, P1, P5, P7, P4, P6)
 
 Branch: `hayden/components-pt3`. Same procedure as D2: one task at a time, stop for review, commit message given.
-Design: `docs/design/safety-phase.md`. Every task ends with `pytest -q` (1318 tests before Task 3), `ruff check .`, and the
-golden files unchanged (`tests/golden/pipeline.json`, `tests/golden/gruolin_renders.json`).
+Design: `docs/design/safety-phase.md`. Every task ends with `pytest -q` (1318 tests before Task 3, 1391 after Task 5),
+`ruff check .`, and the golden files unchanged (`tests/golden/pipeline.json`, `tests/golden/gruolin_renders.json`).
+Tasks 6 and 7 (P4, P6) were added on 13 Nov 2026, when the audit's deferred items were decided (`docs/AUDIT.md`).
 
 Tags: **[mechanical]** = the change is fully specified here; **[careful]** = judgement calls, read the design first.
 
@@ -157,7 +158,97 @@ flushes after the blackout and before anything that can block.
 
 ---
 
-## After task 5
+## Task 6 — Notice an audio stall (P4) [careful]
+
+**Files:** new `src/pylzr/audio/stall.py`, `src/pylzr/audio/__init__.py`; `src/pylzr/engine.py` (constants after
+`:17`, signal after `:37`, `__init__` `:42-73`, `start`/`stop` `:77-84`, `set_sound_mode` `:118-130`,
+`switch_device`/`refresh_devices` `:136-153`, new methods after `:201`); `src/pylzr/analysis/sound_mode.py` (new
+`go_quiet` after `:84`, `update_mode` `:70`); `src/pylzr/analysis/analyzer.py:21-37` (`_reset` → `reset`);
+`src/pylzr/midi/midi_output.py` (`__init__` `:57`, new `last_note`/`forget_last_note`, `close` `:95-103`,
+`press_note` `:105-119`, `panic` `:121-153`); `src/pylzr/core/protocols.py:7`, `src/pylzr/core/output_switch.py:39-40`,
+`src/pylzr/dmx/dmx_output.py:296` (`skip_if_last` keyword); `src/pylzr/gui/main_window.py` (one connection after
+`:125`, `_on_control_mode_changed` `:283-284`); `tests/conftest.py` (autouse fixture); `tests/helpers.py`
+(`FakeClock`, `watch_with`, `stall`); new `tests/test_stall.py`; new tests in `tests/test_sound_mode.py`,
+`tests/test_analyzer.py`, `tests/test_midi_output.py`, `tests/test_output_switch.py`, `tests/test_engine.py`,
+`tests/test_main_window.py`, `tests/test_main_window_dmx.py`, `tests/test_safety.py`; `README.md:288`.
+Implementation plan: `docs/plans/task-6-audio-stall.md`.
+
+**Change:** PortAudio's callback stamps a `StallWatch` before queueing each chunk. A 250 ms timer on the GUI thread
+asks it whether audio has stopped: no chunk for `STALL_TIMEOUT_S = 2.0` while the engine is started (Q16). On a stall
+(once): with sound mode on, `SoundMode.go_quiet()` sends the quiet cue (LOW 0 / HIGH 0, SPACE) unless the mode is
+already quiet; the analyzer's partial window and the last averages are dropped; one WARNING in the console that says
+what happened and what to do (`Audio: no sound from "<device>" for 2 s: the input has stopped (unplugged, or its
+driver stopped). Check the audio interface and its cable, then click ↻ next to Device in Settings (⚙).`);
+`audio_status_changed(False, 'No audio')` turns the Settings dot red. On the first chunk after it: one INFO
+(`"<device>" is sending sound again.`), dot green with the device name. A check that comes over 2 s late (sleep, a
+blocked GUI thread) restarts the wait instead. Starting capture, switching device and rescanning restart it too. Not
+the emergency stop, and DMX output is untouched (Q15). No automatic reopen (Q17, for now).
+SPACE stays consistent with Task 3's Q10–Q12 (ASSUMPTION(Q21)): sound mode's quiet cue already is SPACE, and the
+stall uses that path; `MIDIOutput` now records the last Note ON, and neither sound mode's SPACE cue
+(`press_note(…, skip_if_last=True)`) nor the emergency stop's SPACE (`panic`) goes out when SPACE is already the last
+note sent. Checked and sent under the MIDI send lock. Switching Control Mode to MIDI forgets the last note when it
+re-arms SPACE; opening a port starts with none. The keyboard's SPACE key never skips.
+
+**Acceptance:**
+- No chunk for 2 s with sound mode on: exactly one quiet cue (note 106), one WARNING, `audio_status_changed(False,
+  'No audio')`, `modes_updated` with LOW 0 / HIGH 0. Already quiet: no cue. Sound mode off: no cue, still warned.
+- Still no audio on later checks: nothing more is sent or logged.
+- Audio back: one INFO, `audio_status_changed(True, <device>)`; the next full window sends its cue.
+- The warning and the recovery line appear in the window's console at its default level (Info), the warning with
+  its icon, and name the device, the cause and the ↻ button.
+- Turning sound mode on during a stall sends the quiet cue, not the cue from before the stall.
+- A busy GUI thread (chunks queued, not yet processed) is not a stall; a late check is not a stall.
+- SPACE reaches SoundSwitch once for: a stall then an emergency stop (and a second stop right after); an emergency
+  stop then a stall; two stalls with quiet audio between; sound mode toggled during a stall. Two stalls with a lit
+  cue between send SPACE after each lit cue, never twice in a row. A skipped SPACE leaves the arm set (Q11).
+  `panic()` and a skipping `press_note` on two threads at once send SPACE once (deterministic test).
+- Task 3's SPACE tests pass unchanged (re-enabling MIDI or opening a port still gives the next stop its SPACE).
+- DMX: during a stall in DMX mode the frames sent are unchanged (tester values still out, no blackout).
+- Every other test runs with stalls off (autouse fixture); the golden pipeline test is unchanged.
+
+**Verify:** `pytest tests/test_stall.py tests/test_sound_mode.py tests/test_analyzer.py tests/test_midi_output.py
+tests/test_output_switch.py tests/test_engine.py tests/test_main_window.py tests/test_main_window_dmx.py
+tests/test_safety.py -q`; the real-timer and two-thread tests 20× each; full suite ×3 (1428); `ruff check .`.
+Manual (you): unplug the USB microphone with sound mode on, watch the in-app console, the Settings dot and
+SoundSwitch; plug it back and press ↻; trigger an emergency stop during a stall and check a MIDI monitor shows one
+SPACE.
+
+---
+
+## Task 7 — Start without an input device (P6) [careful]
+
+**Files:** `src/pylzr/audio/audio_input.py:29-44` (`__init__`), `:92-126` (`start`, `stop`, `switch_device`,
+`refresh_devices`), `:146-150` (`close`); `src/pylzr/engine.py` (skip the stall check with no stream);
+`src/pylzr/gui/main_window.py:113`, `:194-195`, `:246-262` (`_show_audio_device` and its callers);
+`src/pylzr/gui/settings_panel.py` (`set_audio_devices` with an empty list); `tests/fakes/pyaudio.py` (no default
+device when there are no inputs, as PortAudio does); tests in `tests/test_audio_input.py`
+(`test_failed_open_releases_portaudio` changes), `tests/test_engine.py`, `tests/test_main_window.py`.
+Implementation plan: written after Task 6 is reviewed (`docs/plans/task-7-no-input-device.md`).
+
+**Change:** `AudioInput.__init__` no longer raises when no input can be opened (no device, device busy, PortAudio
+fails to start): it logs a WARNING with the reason, keeps `_stream = None`, `device_name = None`, `error = <reason>`.
+`start()`/`stop()` record whether capture is wanted; `switch_device()` and `refresh_devices()` work from that state
+and start the new stream if capture is wanted. The engine skips the stall check while no stream is open. The window
+shows "No input device" (dot red) and an empty device list; keyboard cues, MIDI, DMX and the tester all work. No
+automatic retry (design Q20): ↻ opens a device plugged in later.
+
+**Acceptance:**
+- With no input devices (fake), the window opens, the dot is red with "No input device", one WARNING names the
+  reason, and a keyboard cue reaches MIDI.
+- `fail_open = {0}` (the default is busy): same, with the error in the WARNING.
+- A device added, then ↻: it opens and captures (`harness.feed` produces frames), dot green.
+- Choosing a device from the no-input state opens and captures it.
+- No stall warning while there's no stream; a stall is still detected once a stream is open.
+- Closing the window from the no-input state releases PortAudio and the FFT thread.
+- The saved `audio/device` isn't overwritten by a start with no device.
+
+**Verify:** `pytest tests/test_audio_input.py tests/test_engine.py tests/test_main_window.py -q`; full suite ×3;
+`ruff check .`. Manual (you): start PyLZR with every input disabled in the OS sound settings; then enable one and ↻.
+
+---
+
+## After task 7
 - Hardware check (you): close PyLZR while the Gruolin is lit; pull the node's cable, then plug it back; note what the
   CR011R does without DMX (hold or dark) and record it in the README's DMX section.
-- Then the D2 remainder (components 11 and 12), then the D3 prep refactors, in the order in `ROADMAP.md`.
+- Then the D2 remainder (components 11, starting with I5, and 12), then the D3 prep refactors, in the order in
+  `ROADMAP.md`.

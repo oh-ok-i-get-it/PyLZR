@@ -2,9 +2,11 @@
 
 ## Scope
 Small changes in the music nudge attributes inside the current scene (speed, size, position, strobe, …); big changes
-still switch scenes through sound mode's cues. Two enabling components first: (1) the analysis worker thread, so cues
-and features never wait for the GUI (audit I1); (2) a 1024-sample hop with the 2048-sample window, so features arrive
-every 23 ms (audit I7). Out of scope: beat tracking beyond a simple onset, any learned behaviour (D7), a modulation
+still switch scenes through sound mode's cues. Three enabling components first: (0) benchmarks behind
+`PYLZR_BENCH=1` (audit I8), so the next two are measured, not assumed; (1) the analysis worker thread, so cues and
+features never wait for the GUI (audit I1), with the chunk-queue bound (audit P8); (2) a 1024-sample hop with the
+2048-sample window, so features arrive every 23 ms (audit I7). Audio-stall detection (audit P4) is already in place
+from D2.5 Task 6; component 1 moves it onto the worker's thread. Out of scope: beat tracking beyond a simple onset, any learned behaviour (D7), a modulation
 *editor* beyond a table in Settings, changing the 4×4 mode logic.
 
 ## Interfaces
@@ -73,23 +75,30 @@ still hold.
   (the golden file changes only in frame count, not in band values per window: regenerate and review).
 - The modulator's `update` runs on the analysis thread and `apply` on the frame-clock thread; one lock around a small
   float snapshot (no allocation per hop). Budget: `update` < 50 µs, `apply` < 100 µs per fixture.
-- Queue bound (audit P8, now relevant): the worker drops *display* emits when more than 2 chunks are pending, never
-  analysis; a counter shows "late" in Performance.
+- Queue bound (audit P8, built with component 1): the worker drops *display* emits when more than 2 chunks are
+  pending, never analysis; a counter shows "late" in Performance.
+- Stall check (audit P4, from D2.5 Task 6): the callback thread still stamps `StallWatch.chunk()`; the check timer
+  and the quiet cue move to the worker's thread with `SoundMode` (`go_quiet` runs where `check_mode` runs);
+  `audio_status_changed` reaches the GUI queued.
 
 ## Failure modes
 | Failure | Safe state |
 |---|---|
 | Analysis thread raises | exception hook → blackout; the thread's loop continues; FFT rate shows 0 if it died |
-| Audio stops (device gone) | no features → modulations decay to 0 → the scene's own values; `fps 0` warning (audit P4 becomes in-scope here) |
+| Audio stops (device gone) | no features → modulations decay to 0 → the scene's own values; the D2.5 Task 6 stall handling (warning, dot red, quiet cue) runs on the worker's thread (its `StallWatch` check timer lives on the worker's event loop, so a frozen GUI can't delay it) |
 | Feature NaN/inf (silence with log scaling bug) | `Features` validates finite numbers; non-finite → hop skipped and counted |
 | Modulation names an attribute a fixture lacks | skipped, reported with the scene's `unsupported` |
 | Modulated value leaves the range | clamped to the attribute's range before render; binding limits (`limit`, `min`/`max`) then apply |
 | GUI frozen | cues and features unaffected; only the display lags (the point of I1) |
 
 ## Migration (each step leaves the app working)
+0. Benchmarks (audit I8): `tests/bench_*.py`, skipped unless `PYLZR_BENCH=1`, with the audit's measured table as
+   baselines (render, frame build, FFT, settings save, plot redraw) plus chunk-to-cue latency with the GUI idle and
+   with it busy. Run before and after steps 1 and 2; the numbers go in their commit messages.
 1. `AnalysisWorker` = today's `FFTWorker` (`fft_worker.py:33-37`) plus `AudioAnalyzer` and `SoundMode` moved from
-   `engine.py:171-188`; the engine forwards signals; settings become queued slots. Update
-   `tests/test_engine.py:115-133` (processing thread is now the worker). Golden file unchanged.
+   `engine.py:171-188`; the engine forwards signals; settings become queued slots. The queue bound (audit P8) and the
+   stall check's move (above) are part of this step. Update `tests/test_engine.py:115-133` (processing thread is now
+   the worker). Golden file unchanged.
 2. `HOP`: buffer two hops into the 2048 window; `FeatureExtractor` emits `Features`; `AudioAnalyzer.push` is fed per
    hop (count_rate semantics: frames = hops; the `DM_TOGGLE_FRAMES` constant doubles to keep ~111 s). Regenerate the
    golden file; review the diff (twice the frames, same averages within tolerance).
@@ -113,5 +122,7 @@ Safety phase, cue abstraction, app object, frame clock, D3 scenes (modulations l
 - **Q2.** Feature set for v1: just `low`, `high`, `level`, `onset`, or also a mid band and spectral centroid?
 - **Q3.** Modulations per scene (proposed) or one global table that applies to every scene?
 - **Q4.** Should audit P4 (audio-stall warning, quiet cue on silence) be adopted as part of this phase, since the
-  worker is where it belongs?
+  worker is where it belongs? **Decided: no, earlier.** It is adopted in D2.5 as Task 6 (`safety-phase.md`,
+  `docs/plans/task-6-audio-stall.md`), since a held cue on a dead input matters before anything runs unattended.
+  This phase only moves its check and the quiet cue onto the worker's thread (component 1).
 - **Q5.** Should `count_rate` stay in "frames" (now hops) or become seconds in the UI, now that the hop changes?

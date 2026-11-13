@@ -65,7 +65,8 @@ MainWindow(app)`, `app.start()`, `window.show()`.
 ## Failure modes
 | Failure | Safe state |
 |---|---|
-| A subsystem fails to construct (e.g. no audio device, audit P6, still out of scope) | `App.__init__` raises as today; `main()` logs and exits before any DMX is sent |
+| No usable audio input (audit P6) | handled since D2.5 Task 7 (`safety-phase.md`): `AudioInput` constructs with no stream, the app runs, `audio_status_changed(False, 'No input device')`; `App` keeps that behaviour and forwards the engine's signal |
+| Another subsystem fails to construct | `App.__init__` raises as today; `main()` logs and exits before any DMX is sent |
 | `shutdown()` called twice (window close + atexit) | idempotent, like `engine.shutdown()` and `dmx_out.close()` today |
 | A GUI setter raises while handling an app signal | exception hook → blackout; the app's state is already updated, so a later re-sync (`fixtures_changed`) repairs the view |
 | `start()` never called (a test forgot) | nothing runs, nothing is sent |
@@ -77,7 +78,9 @@ MainWindow(app)`, `app.start()`, `window.show()`.
    `_on_dmx_node_changed`, `_find_dmx_nodes`, `_on_audio_device_changed`, `_rescan_audio_devices`,
    `_on_midi_port_changed`, `_reset_settings` minus `_refresh_midi_ports`, `_on_patch_edited`,
    `main_window.py:227-324`) into `App` methods; the window's handlers call them and update widgets from the result or
-   from the new signals.
+   from the new signals. Audit I10 folds in here: the window's fixture view (`_show_fixtures`, which stays in the
+   window) builds `library.rig()` once per call and passes that one rig to both the fixtures list and the tester,
+   instead of building it twice (`main_window.py:329, 333` today).
 3. Move `_apply_settings`/`_save_changes` (`main_window.py:149-171`) into `App.start()`; the window shows what the app
    applied by listening to the signals (the same path user input takes today).
 4. Move the `EmergencyStop` registration and `closeEvent` order into `App.shutdown()`; `closeEvent` calls it.
@@ -90,7 +93,7 @@ CI only. The window tests are the regression guard for each step; the new `test_
 test that `App()` + `start()` + `shutdown()` sends no DMX in MIDI mode and the blackout sequence in DMX mode.
 
 ## Dependencies
-Builds on the safety phase (ownership of the stop) and the cue abstraction (`output` is a `CueOutput` switch). The
+Builds on the safety phase (ownership of the stop; the audio status from P4/P6) and the cue abstraction (`output` is a `CueOutput` switch). The
 frame clock and D3's scene player are created by `App`.
 
 ## Open questions

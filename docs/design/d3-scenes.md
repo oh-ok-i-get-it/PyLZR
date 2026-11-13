@@ -98,3 +98,8 @@ source failures.
   fixture's default, and for `pattern` it means dark)?
 - **Q4.** Where scenes are edited: a tab in the tester window (reuses the Attributes grid) or a new window?
 - **Q5.** Should a scene remember raw (untagged) patterns, or only tagged requests? Raw ties a scene to one laser.
+- **Q6.** What does an audio stall do in DMX mode once scenes drive the laser: hold the current scene, play the quiet
+  scene (the LOW 0 / HIGH 0 cue's scene, which is what D2.5 Task 6's quiet cue would reach through the cue→scene map
+  unchanged), or black out? Until D3, DMX content doesn't follow cues, so a stall changes nothing in DMX
+  (`safety-phase.md` Q15). Decide before D3's playback step, since an unattended show with a dead microphone is the
+  case it is for.
