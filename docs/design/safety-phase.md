@@ -97,3 +97,4 @@ as another trigger of the same stop.
 - **Q3.** `FLUSH_MS = 400`: a killed app loses at most that much of settings changes. Acceptable, or lower (200)?
 - **Q4.** Does the CR011R have a DMX-loss setting? Needs the manual or a test with the cable pulled.
 - **Q5.** Three blackout frames back to back, or spread over three ticks (75 ms) when the timer is still alive?
+  ASSUMPTION(Q5): back to back (`BLACKOUT_REPEATS` in `dmx_output.py`); spreading them is a change to `_blackout()` only.

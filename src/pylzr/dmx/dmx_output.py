@@ -15,6 +15,12 @@ log = get_logger('dmx')
 
 _BLACKOUT = bytes(DMX_CHANNELS)
 
+# A blackout is sent this many times, so one lost UDP datagram can't leave
+# the laser on its last look. Each copy has its own sequence number.
+# ASSUMPTION(Q5): back to back rather than spread over ticks, since the timer
+# may be what failed (docs/design/safety-phase.md, open question Q5).
+BLACKOUT_REPEATS = 3
+
 # While sending, ask the node "are you there?" every 3 s (Art-Net suggests
 # 2.5–3 s); an answer counts for 10 s, so one lost reply doesn't matter.
 PING_TICKS   = 3 * DMX_REFRESH_HZ
@@ -57,8 +63,9 @@ class DMXOutput(QObject):
     fixtures expect the whole frame over and over). Everything runs on the
     GUI thread; one send takes microseconds.
 
-    start() / stop() control sending; stop() and close() send one blackout
-    frame first, so the laser goes dark rather than holding its last look.
+    start() / stop() control sending; stop() and close() send the blackout
+    frame BLACKOUT_REPEATS times first, so the laser goes dark rather than
+    holding its last look even if a datagram is lost.
     set_test_values() / clear_test_values() drive the universe's override
     layer (the channel tester).
 
@@ -131,7 +138,7 @@ class DMXOutput(QObject):
             log.error(f'DMX: "{node_ip}" is not an IPv4 address')
             return False
         if self.active:
-            self._send(_BLACKOUT)
+            self._blackout()
         self._sender.close()
         self._sender, self.port = sender, port
         self._watch.restart()           # a different node: its answers start afresh
@@ -154,11 +161,12 @@ class DMXOutput(QObject):
         self._tick()                    # first frame now, not one interval later
 
     def stop(self):
-        """Stop sending, after one blackout frame. Does nothing if stopped."""
+        """Stop sending, after the blackout (sent BLACKOUT_REPEATS times).
+        Does nothing if stopped."""
         if not self.active:
             return
         self._timer.stop()
-        self._send(_BLACKOUT)
+        self._blackout()
         self._answered_node = None
         self._set_status('off', 'Off')
 
@@ -192,6 +200,10 @@ class DMXOutput(QObject):
         if self._watch.tick() and self._discovery is not None:
             self._discovery.ping(self.node_ip)
         self._send(self.universe.frame())
+
+    def _blackout(self):
+        for _ in range(BLACKOUT_REPEATS):
+            self._send(_BLACKOUT)
 
     def _on_reply(self, reply: PollReply):
         if self.active and reply.ip == self.node_ip:

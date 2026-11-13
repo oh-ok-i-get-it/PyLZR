@@ -80,7 +80,7 @@ def test_leaving_dmx_blacks_out_then_stops(harness, qapp):
     w.dmx_out.universe.set(1, 255)
     w.dmx_out._tick()
     set_mode(harness, 'MIDI')
-    assert frames()[-1] == bytes(512)
+    assert frames()[-3:] == [bytes(512)] * 3
     sent = len(fake_udp.sent)
     qapp.processEvents()
     assert len(fake_udp.sent) == sent and not w.dmx_out.active
@@ -176,7 +176,7 @@ def test_closing_the_app_blacks_out_and_releases_the_socket(harness):
     set_mode(harness, 'DMX')
     w.dmx_out.universe.set(1, 255)
     harness.close()
-    assert frames()[-1] == bytes(512)
+    assert frames()[-3:] == [bytes(512)] * 3
     assert fake_udp.sockets[0].closed == 1               # the sending socket
 
 

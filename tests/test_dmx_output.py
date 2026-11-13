@@ -9,11 +9,12 @@ from fakes.udp import FakeSocket
 from helpers import artpollreply, dmx_packets as packets, wait_until
 from pylzr.core import DMX_REFRESH_HZ
 from pylzr.dmx import DMXOutput, PortAddress, parse_artpollreply
-from pylzr.dmx.dmx_output import ANSWER_TICKS, PING_TICKS, status_for
+from pylzr.dmx.dmx_output import ANSWER_TICKS, BLACKOUT_REPEATS, PING_TICKS, status_for
 
 pytestmark = pytest.mark.usefixtures('qapp')     # QTimer needs a Qt application
 
 NODE = ('10.201.6.100', 6454)
+DARK = [bytes(512)] * 3
 
 
 def frames() -> list[bytes]:
@@ -67,15 +68,19 @@ def test_universe_address_in_every_packet():
     assert {(p['net'], p['sub_uni']) for p in packets()} == {(1, 0x23)}
 
 
-def test_stop_sends_one_blackout_then_nothing(out, statuses):
+def test_blackout_is_sent_three_times():
+    assert BLACKOUT_REPEATS == 3
+
+
+def test_stop_sends_the_blackout_three_times_then_nothing(out, statuses):
     out.universe.set(1, 255)
     out.set_test_values(5, [255])
     out.start()
     out.stop()
     out.stop()
     assert not out.active
-    assert frames()[-1] == bytes(512)            # dark, even over test values
-    assert len(packets()) == 2
+    assert frames()[-3:] == DARK                 # dark, even over test values
+    assert len(packets()) == 1 + 3
     assert statuses[-1] == ('off', 'Off')
     assert out.universe.get(1) == 255            # the show itself is kept
 
@@ -91,7 +96,7 @@ def test_close_blacks_out_once_and_releases_the_socket(out):
     out.start()
     out.close()
     out.close()
-    assert frames()[-1] == bytes(512) and len(packets()) == 2
+    assert frames()[-3:] == DARK and len(packets()) == 1 + 3
     assert fake_udp.sockets[0].closed == 1
     with pytest.raises(RuntimeError):
         out.start()
@@ -128,11 +133,25 @@ def test_configure_while_sending_blacks_out_the_old_node(out):
     out.start()
     assert out.configure('10.201.6.101', PortAddress(0, 0, 1))
     old, new = [p for p in packets() if p['to'] == NODE], [p for p in packets() if p['to'] != NODE]
-    assert old[-1]['data'] == bytes(512)         # the old node goes dark
+    assert [p['data'] for p in old[1:]] == DARK  # the old node goes dark, three times
     assert new[0]['to'] == ('10.201.6.101', 6454) and new[0]['sub_uni'] == 1
     assert new[0]['data'][0] == 200              # the new one gets the show at once
     assert fake_udp.sockets[0].closed == 1       # old socket released
     assert out.node_ip == '10.201.6.101'
+
+
+def test_each_blackout_copy_has_its_own_sequence_number(out):
+    """A node that drops repeated sequence numbers still takes all three."""
+    out.start()
+    out.stop()
+    assert [p['sequence'] for p in packets()] == [1, 2, 3, 4]
+
+
+def test_one_lost_blackout_send_still_leaves_two(out):
+    out.start()
+    fake_udp.fail_next.append(OSError(errno.ENETUNREACH, 'x'))
+    out.stop()
+    assert frames()[1:] == [bytes(512)] * 2
 
 
 def test_configure_while_stopped_sends_nothing(out):

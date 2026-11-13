@@ -26,7 +26,7 @@ In `AudioEngine.shutdown`, `self.fft_thread.wait(2000)` and log a warning if it 
 
 ---
 
-## Task 2 — Repeat the blackout (P3) [mechanical]
+## Task 2 — Repeat the blackout (P3) [mechanical] — DONE
 
 **Files:** `src/pylzr/dmx/dmx_output.py:16` (constant), `:133-134` (`configure`), `:156-163` (`stop`);
 tests `tests/test_dmx_output.py:70-79, 90-94, 126-136`, `tests/test_main_window_dmx.py:77-89, 174-181`.
