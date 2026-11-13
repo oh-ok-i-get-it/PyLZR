@@ -102,25 +102,38 @@ watch the console and the DMX indicator; Ctrl+C in the terminal; MIDI mode with 
 
 ---
 
-## Task 4 — Debounced settings writes (P5) [careful]
+## Task 4 — Debounced settings writes (P5) [careful] — DONE
 
-**Files:** `src/pylzr/gui/settings_store.py:83-87`; `src/pylzr/gui/main_window.py:371-378` (flush in `closeEvent`,
-before `dmx_out.close()`); `tests/test_settings_store.py:77-81` (rewrite), new tests there.
+**Files:** `src/pylzr/gui/settings_store.py:1-91`; `src/pylzr/gui/main_window.py:46-48` (docstring) and
+`closeEvent` `:423-436` (flush right after `_close_dmx_tester()`, before `engine.shutdown()`);
+`tests/test_settings_store.py:77-81` (replace), new tests there and in `tests/test_safety.py`. Implementation plan:
+`docs/plans/task-4-debounced-settings.md`.
 
 **Change:** `SettingsStore.set()` writes the value into `QSettings` but defers `sync()` to a single-shot `QTimer`
-(`FLUSH_MS = 400`, restarted on every set). `flush()` syncs now and stops the timer. `clear()` flushes. The timer
-needs a `QCoreApplication`; without one (plain unit tests) `set()` syncs immediately, so the store works headless.
+(`FLUSH_MS = 400`, restarted on every set). Qt's own automatic write is held back too: plain `QSettings` posts itself
+an `UpdateRequest` after any change and writes on the next event-loop pass, so the store uses a `QSettings` subclass
+that ignores that event (Q14). `flush()` syncs now and stops the timer. `clear()` stops the timer, clears and syncs.
+The timer needs a `QCoreApplication`; without one (plain unit tests) `set()` syncs immediately, so the store works
+headless. A failed write (`sync()` doesn't raise; `status()` reports it) is logged once per store. `closeEvent`
+flushes after the blackout and before anything that can block.
 
 **Acceptance:**
-- 100 `set()` calls in a row produce one write (count `sync` calls through a monkeypatch, or file mtime/size).
-- A value is on disk within `FLUSH_MS` + 100 ms without any other call (`wait_until` on the file text).
-- `flush()` writes immediately; `closeEvent` leaves nothing pending (restart test `test_settings_restored_after_restart`
-  still passes, and a variant that closes within 50 ms of the last change still restores it).
-- `test_each_change_is_written_to_disk_immediately` becomes "written within the debounce, and at once on flush".
-- Reset to defaults still clears the file (`test_clear`, `test_reset_to_defaults`).
+- 100 `set()` calls in a row, with events processed between them, produce no write until `flush()`, then one (count
+  `sync` calls through a monkeypatch, and read the file text).
+- With nothing else called, the value is on disk once the timer fires (`wait_until` on the file text; tests patch
+  `FLUSH_MS` to a few ms).
+- `flush()` writes immediately. A window closed right after a change has it **in the file on disk** when `closeEvent`
+  returns, read before any other store is created (a new `SettingsStore` or `QSettings` would itself write pending
+  changes, and stores in one process share Qt's cache, so a same-process restart test can't show this). The flush
+  comes after the blackout and before `engine.shutdown()`.
+- Ctrl+C right after a change keeps it (written by `closeEvent`, not the timer).
+- `test_each_change_is_written_to_disk_immediately` becomes "written when the timer fires, and at once on flush";
+  "immediately" stays true without a `QCoreApplication`.
+- Reset to defaults still clears the file (`test_clear`, `test_reset_to_defaults`), and drops a pending write.
+- The new tests add well under 0.5 s to the suite.
 
 **Verify:** `pytest tests/test_settings_store.py -q`; full suite; manual: drag a cutoff slider for 5 s and check the
-.ini changed once or twice, not hundreds of times (watch its mtime).
+.ini changed once, about 0.4 s after release, not hundreds of times (watch its mtime).
 
 ---
 

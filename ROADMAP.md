@@ -49,6 +49,9 @@ position within a scene, while big changes still switch scenes.
 ### PyQt6 spike (before D6)
 A branch that builds the app on PyQt6: enum namespaces, `exec()`, pyqtgraph on Qt6, the stylesheet and `set_role`
 unchanged. Decides whether D6's timeline UI is built on Qt 5 or 6.
+Also re-check that `SettingsStore`'s `QSettings` subclass still holds back Qt's automatic write (it ignores the
+`UpdateRequest` event Qt 5.15 posts itself; design Q14): the two pinning tests in `tests/test_settings_store.py`,
+`test_a_change_waits_for_the_flush_timer` and `test_many_changes_are_written_once_on_flush`, must still pass.
 
 ### D6: timecoded shows → v0.9.0 — `docs/design/d6-timecode-shows.md`
 Program looks against an audio file (or import them from a DAW) and play them back in sync.

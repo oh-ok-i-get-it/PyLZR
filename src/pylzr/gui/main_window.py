@@ -44,8 +44,8 @@ class MainWindow(QWidget):
 
     This class only connects things — the pipeline lives in engine.py and
     the audio/, analysis/, midi/, dmx/ and fixtures/ packages. User settings
-    are restored from the SettingsStore at startup and saved whenever they
-    change.
+    are restored from the SettingsStore at startup, saved shortly after they
+    change (the store waits for changes to pause) and written on close.
     """
 
     def __init__(self, safety: EmergencyStop | None = None):
@@ -421,11 +421,12 @@ class MainWindow(QWidget):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        # The blackout goes out first, before anything that could block
-        # (closing audio, waiting for the FFT thread); the socket is released
-        # last. See docs/design/safety-phase.md.
+        # The blackout goes out first, then the settings are written, both
+        # before anything that could block (closing audio, waiting for the FFT
+        # thread); the socket is released last. See docs/design/safety-phase.md.
         self.dmx_out.stop()
         self._close_dmx_tester()
+        self.store.flush()                      # settings to disk before anything that can block (audio close, FFT wait)
         self.engine.shutdown()
         self.discovery.close()
         self.midi_out.close()

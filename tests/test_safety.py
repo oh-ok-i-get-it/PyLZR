@@ -26,6 +26,7 @@ from fakes import udp as fake_udp
 from fakes.udp import FakeSocket
 from helpers import dmx_packets, note_messages, note_ons, tone_chunks, wait_for_note_offs, wait_until
 from pylzr.core.safety import EmergencyStop, install_excepthook
+from pylzr.gui import settings_store
 from pylzr.dmx.dmx_output import BLACKOUT_REPEATS
 
 SPACE_ON  = [0x90, 106, 112]
@@ -322,6 +323,15 @@ def test_switching_control_mode_after_the_stop_resumes_dmx(safety, make_window, 
     assert frames()[-1][0] == 255
 
 
+def test_settings_keep_saving_after_an_unhandled_exception(safety, make_window, qapp, monkeypatch):
+    monkeypatch.setattr(settings_store, 'FLUSH_MS', 5)
+    w = make_window(safety=safety).window
+    raise_in_a_slot()
+    w.settings_panel.set_gain(2.5)
+    wait_until(lambda: Path(w.store.path).exists() and 'gain=2.5' in Path(w.store.path).read_text(),
+               timeout=1.0)
+
+
 def _raise_once_in_fft(monkeypatch):
     """The first FFT on the worker thread raises. (Replacing FFTWorker.process itself doesn't work: PyQt has
     already registered the original as the slot, and the replacement is never called.)"""
@@ -534,6 +544,19 @@ def test_ctrl_c_in_a_slot_closes_the_window_like_the_close_button(hooks, make_wi
     assert fake_udp.sockets[0].closed == 1
     assert frames()[-3:] == DARK
     assert stop._stops == {}                             # closeEvent ran
+
+
+def test_ctrl_c_quit_writes_pending_settings(hooks, make_window, qapp, monkeypatch):
+    monkeypatch.setattr(settings_store, 'FLUSH_MS', 60_000)      # the timer can't be what writes it
+    stop = EmergencyStop()
+    install_excepthook(stop, on_interrupt=pylzr.__main__._quit_as_if_closed)
+    w = make_window(safety=stop).window
+    w.show()
+    w.settings_panel.set_gain(2.5)
+    raise_in_a_slot(KeyboardInterrupt())
+    wait_until(lambda: not w.isVisible())
+    assert 'gain=2.5' in Path(w.store.path).read_text()
+    assert not w.store.pending
 
 
 # ── At exit, and in main() ───────────────────────────────────────────────

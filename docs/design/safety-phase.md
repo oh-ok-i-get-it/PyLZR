@@ -48,7 +48,10 @@ BLACKOUT_NOTE = 106             # SPACE; SoundSwitch's blackout look
 FLUSH_MS = 400
 def set(self, key, value) -> None   # stores the value, (re)starts the flush timer; syncs at once with no QCoreApplication
 def flush(self) -> None             # sync now, stop the timer
-def clear(self) -> None             # flushes
+def clear(self) -> None             # stops the timer, clears, syncs now
+@property
+def pending(self) -> bool           # a change is waiting for the flush timer
+class _DeferredSettings(QSettings)  # private: ignores Qt's UpdateRequest, so only sync() (or the destructor) writes (Q14)
 
 # src/pylzr/engine.py  (order only; no new names)
 ```
@@ -86,7 +89,9 @@ owns its timer. `DMXOutput` owns the blackout policy.
 - Deadline: dark frames leave within one tick (25 ms) of the trigger. The stop runs before any logging. The three sends
   are back to back (microseconds); spacing them over ticks would need the timer that may be the thing that failed.
 - Settings: `set()` on the GUI thread; the flush timer fires on the GUI thread; one `sync()` costs 2–4 ms measured,
-  so at most one such stall per `FLUSH_MS` of user input instead of one per slider step.
+  so one such stall per pause of `FLUSH_MS` in changes (a continuous drag writes once, after it ends), plus one on
+  close, instead of one per slider step. Plain `QSettings` would also write on the next event-loop pass after any
+  change (it posts itself an `UpdateRequest`); the store's subclass ignores that event (Q14).
 - Engine order: `_process_chunk` queues the FFT before drawing the waveform; `_on_spectrum` runs the analyzer, sound
   mode and cue before emitting `spectrum_ready` (plot redraw). Same thread, same values, less time before the cue.
 
@@ -102,7 +107,8 @@ owns its timer. `DMXOutput` owns the blackout policy.
 | `closeEvent` blocks in PortAudio close or `fft_thread.wait()` | no blackout | blackout already sent; `wait(2000)` logs and continues |
 | One blackout datagram lost | last look held | two more follow |
 | Stop callable raises inside `trigger()` | n/a | logged; other stops still run; `triggered` stays True |
-| `sync()` fails (disk full, locked file) | exception in a slot → abort | logged once, value stays in memory, retried on next flush |
+| `sync()` fails (disk full, locked file, folder not creatable) | silent: `QSettings.sync()` doesn't raise, `status()` reports it and nobody reads it | logged once per store (WARNING, names the file); the value stays in memory (`get()` returns it) and the next successful sync writes it (next change, or close). Recovery isn't logged: `status()` keeps its first error. |
+| Settings changed, then the app is killed | nothing lost (every change written at once) | changes since input last paused for `FLUSH_MS` are lost (Q3); a normal close and Ctrl+C write them (`closeEvent` flushes) |
 | App killed (-9, power loss) | last look held | unchanged: only the node's own DMX-loss setting helps (hardware check) |
 | `panic()` while DMX is off | n/a | sends nothing, logs at DEBUG (only dark frames until a `start()` after its queued `stop()`) |
 | `panic()` at exit, window already deleted | n/a | dark frames still sent (Python state only); the guarded `emit` fails quietly |
@@ -120,8 +126,9 @@ owns its timer. `DMXOutput` owns the blackout policy.
    `'midi'`; switching Control Mode to MIDI, or opening a MIDI port, re-arms SPACE; `closeEvent` unregisters both
    last. Plan:
    `docs/plans/task-3-emergency-stop.md`.
-4. `settings_store.py:83-87`: deferred sync + `flush()`; `main_window.py` flushes in `closeEvent` before step 1's
-   `dmx_out.close()`; rewrite `tests/test_settings_store.py:77-81`.
+4. `settings_store.py`: deferred sync (`_DeferredSettings`, flush timer) + `flush()`; `main_window.py` flushes in
+   `closeEvent` right after `dmx_out.stop()` and `_close_dmx_tester()`, before `engine.shutdown()`; replace
+   `tests/test_settings_store.py:77-81`. Plan: `docs/plans/task-4-debounced-settings.md`.
 5. `engine.py:154-188`: reorder emits; add the ordering test; golden unchanged.
 
 ## Tests
@@ -153,7 +160,10 @@ as another trigger of the same stop.
   the ON, which today doesn't end a look. Sent after SPACE, all-notes-off would release SPACE too; probably harmless
   for the same reason, but how SoundSwitch treats controller 123 is unchecked, so it goes first. SPACE goes out at
   most once per MIDI enable (Q10). Details: `docs/plans/task-3-emergency-stop.md`.
-- **Q3.** `FLUSH_MS = 400`: a killed app loses at most that much of settings changes. Acceptable, or lower (200)?
+- **Q3.** `FLUSH_MS = 400`: acceptable, or lower (200)? **Decided: keep 400.** The wait restarts on every change, so
+  a killed app loses the changes made since input last paused for 400 ms (during a continuous slider drag, the drag
+  so far). A normal close and Ctrl+C write everything (`closeEvent` flushes). Plan:
+  `docs/plans/task-4-debounced-settings.md`.
 - **Q4.** Does the CR011R have a DMX-loss setting? Needs the manual or a test with the cable pulled.
 - **Q5.** Three blackout frames back to back, or spread over three ticks (75 ms) when the timer is still alive?
   ASSUMPTION(Q5): back to back (`BLACKOUT_REPEATS` in `dmx_output.py`); spreading them is a change to `_blackout()` only.
@@ -172,7 +182,17 @@ as another trigger of the same stop.
 - **Q11.** Does a stop that couldn't deliver SPACE (no port open, Note ON failed) use up the arm?
   ASSUMPTION(Q11): no. The arm is used up by the first SPACE that reaches the port, so SoundSwitch still receives it
   at most once per enable. Making any stop use it up is one line in `MainWindow._midi_emergency_stop`.
-- **Q12.** Should opening a different MIDI port re-arm SPACE? **Decided: yes.** SoundSwitch on the new port hasn't
-  received SPACE through it. Every successful open re-arms (`MainWindow._open_midi_port`): the user choosing a port,
-  Reset, the saved port at startup, and the default port reconnecting (e.g. loopMIDI started after PyLZR). A failed
-  open leaves the arm as it was.
+- **Q12.** Should opening a different MIDI port re-arm SPACE? **Decided: yes, on every successful open, reconnects
+  included** (confirmed after Task 3). SoundSwitch on the port hasn't received SPACE through that connection. Every
+  successful open re-arms (`MainWindow._open_midi_port`): the user choosing a port, Reset, the saved port at startup,
+  and the default port reconnecting (e.g. loopMIDI started after PyLZR). A failed open leaves the arm as it was.
+- **Q13.** Should settings get an extra flush on exit paths that skip `closeEvent` (`atexit`, `aboutToQuit`)?
+  **Decided: no.** No such path exists today (nothing calls `QApplication.quit()`; Ctrl+C closes the windows). If one
+  appears, Qt's `QSettings` destructor writes pending changes when the window and its store are freed. An `atexit`
+  flush registered in `main()` would run before the emergency stop's `atexit` blackout (last in, first out), and
+  `aboutToQuit` fires before `exec_()` returns, so either would put file I/O ahead of the blackout. Reversible: one
+  line in `main()`.
+- **Q14.** How is Qt's own automatic write held back? **Decided: a `QSettings` subclass whose `event()` ignores
+  `QEvent.UpdateRequest`**, not pending values kept in a Python dict. It keeps `get()`, cache sharing between stores
+  in one process, the destructor write and `clear()` as they are. It relies on how Qt 5.15 implements the automatic
+  sync; two tests in `tests/test_settings_store.py` pin it, and the PyQt6 spike re-checks it (`ROADMAP.md`).
