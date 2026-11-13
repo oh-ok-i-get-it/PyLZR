@@ -30,10 +30,12 @@ def install_excepthook(stop: EmergencyStop, on_handled: Callable[[], None] | Non
 BLACKOUT_REPEATS = 3
 def stop(self) -> None          # as today, but sends BLACKOUT_REPEATS dark frames before setting status 'off'
 def configure(...) -> bool      # the old node gets BLACKOUT_REPEATS dark frames while active
-def panic(self) -> None         # from any thread: first set _panicked (from then on _send() refuses every non-dark
-                                # frame, until start()); if the output may be lit (state != 'off'), send
-                                # BLACKOUT_REPEATS dark frames through the sender under the send lock; then emit
-                                # _stop_requested (queued) so the GUI thread runs stop(); swallow every error
+def panic(self) -> None         # from any thread: first take a new panic id (from then on _send() refuses every
+                                # non-dark frame, until a start() that comes after a stop()); if the output may be lit
+                                # (_may_be_lit: set before start()'s first frame), send BLACKOUT_REPEATS dark frames
+                                # through the sender under the send lock (if that takes over 5 ms: without it, then
+                                # again once the send holding it is done); then emit _stop_requested (queued) so the
+                                # GUI thread runs stop(); swallow every error
 
 # src/pylzr/midi/midi_output.py
 def panic(self, note: int | None = None) -> bool   # from any thread: all-notes-off (CC 123, channel 1), then `note`
@@ -53,7 +55,7 @@ def clear(self) -> None             # flushes
 Ownership: `main()` sets up console logging, creates the `EmergencyStop`, installs the hook and registers
 `atexit.register(stop.trigger, 'exit')`, all before any Qt object exists, then passes it to `MainWindow(safety=…)`.
 `MainWindow` registers `dmx_out.panic` under the name `'dmx'`, then `'midi'` (in MIDI mode: all-notes-off, plus SPACE
-once per MIDI enable, Q10), and owns the SPACE arm. Later the app object does this, see `app-object.md`. The store
+once per MIDI enable or MIDI port opened, Q10, Q12), and owns the SPACE arm. Later the app object does this, see `app-object.md`. The store
 owns its timer. `DMXOutput` owns the blackout policy.
 
 ## Threading / timing
@@ -61,19 +63,24 @@ owns its timer. `DMXOutput` owns the blackout policy.
   called instead of `qFatal()`, on the GUI thread for GUI slots and on the FFT thread for `FFTWorker.process`.
   `threading.excepthook` covers plain threads (PortAudio's callback thread is not a Python thread; an exception there is
   swallowed by PyAudio and must not be relied on).
-- `panic()` may run on any thread. Before its sends it reads only Python state (`_closed`, `state`): at exit the Qt
-  objects may already be deleted. It sets `_panicked`, sends under `DMXOutput`'s send lock, and emits a queued signal
-  (guarded: the Qt object may be gone). `QTimer.stop()` happens on the GUI thread via that signal. If the GUI thread
+- `panic()` may run on any thread. Before its sends it reads only Python state (`_closed`, `_may_be_lit`): at exit the
+  Qt objects may already be deleted. It takes a new panic id (so `_panicked`), sends under `DMXOutput`'s send lock,
+  and emits a queued signal (guarded: the Qt object may be gone). `stop()` records the latest panic it has run after
+  and `start()` resumes only up to that one, so a `start()` racing with a `panic()` can neither lose it nor end it
+  before its own `stop()` has run; each of these fields has one writer. `QTimer.stop()` happens on the GUI thread via that signal. If the GUI thread
   is the one that raised, the queued stop runs on the next event-loop pass, after the handler returns.
 - No show frame after the blackout: `_send()` checks `_panicked` and sends under the same lock, so the check and the
   send are one step relative to `panic()`. A flag alone isn't enough: the GUI thread could read it, lose the GIL, and
   send its show frame after the dark ones. The lock is held only for the check, one packet build and one non-blocking
   `sendto` (three for `panic()`): microseconds, well inside the 25 ms frame. No Qt call, signal or logging happens
-  under it, so nothing can re-enter it. `panic()` waits at most 5 ms for it, then sends anyway. With every send under
+  under it, so nothing can re-enter it. `panic()` waits at most 5 ms for it, then sends anyway. That only happens if
+  the GUI thread was descheduled mid-send, and its show frame then goes out after those dark frames, so `panic()`
+  then waits up to 0.1 s for that send to finish and blacks out again: the last frame is dark. With every send under
   this lock, sequence numbers stay unique and `UdpSender`'s `last_error`/`dropped` have one writer at a time.
 - MIDI: `MIDIOutput` serialises `press_note`, the delayed Note OFF, `close()` and `panic()` with its own lock (rtmidi
   doesn't promise thread safety); `panic()` waits at most 0.1 s for it. The SPACE arm is a test-and-clear under a
-  small lock in the window, so two stops at once send SPACE once.
+  small lock in the window, so two stops at once send SPACE once. Switching Control Mode to MIDI re-arms it before
+  the output switches, so a stop in between either still sees DMX or finds it armed.
 - `KeyboardInterrupt` is raised on the main thread only; `on_interrupt` queues the close there (`QTimer.singleShot`),
   so `closeEvent` never runs inside the hook.
 - Deadline: dark frames leave within one tick (25 ms) of the trigger. The stop runs before any logging. The three sends
@@ -97,8 +104,11 @@ owns its timer. `DMXOutput` owns the blackout policy.
 | Stop callable raises inside `trigger()` | n/a | logged; other stops still run; `triggered` stays True |
 | `sync()` fails (disk full, locked file) | exception in a slot → abort | logged once, value stays in memory, retried on next flush |
 | App killed (-9, power loss) | last look held | unchanged: only the node's own DMX-loss setting helps (hardware check) |
-| `panic()` while DMX is off | n/a | sends nothing, logs at DEBUG (the flag is set; `start()` clears it) |
+| `panic()` while DMX is off | n/a | sends nothing, logs at DEBUG (only dark frames until a `start()` after its queued `stop()`) |
 | `panic()` at exit, window already deleted | n/a | dark frames still sent (Python state only); the guarded `emit` fails quietly |
+| GUI thread descheduled mid-send when `panic()` runs elsewhere | n/a | after 5 ms the blackout goes out without the send lock; the frame in flight follows it, then a second blackout once that send is done (≤ 0.1 s), else the queued `stop()`'s |
+| `start()` at the same moment as a `panic()` on another thread | n/a | the panic stays in force: its frames are blocked and its queued `stop()` stops the new run |
+| Ctrl+C while the hook is already running | n/a | swallowed (every layer catches `BaseException`); inside `panic()` it cuts the blackout short and skips queueing `stop()`, but no show frame goes out (the panic stays in force). The app doesn't quit; Ctrl+C again does. Accepted. |
 
 ## Migration (each step leaves the app working)
 1. `main_window.py:371-378`: `dmx_out.stop()` first, `dmx_out.close()` last; `engine.py:92` gets `wait(2000)`.
@@ -107,7 +117,8 @@ owns its timer. `DMXOutput` owns the blackout policy.
 3. `core/safety.py` + `DMXOutput.panic` (flag + send lock in `_send()`) + `_stop_requested` signal +
    `MIDIOutput.panic` + `BLACKOUT_NOTE`. `__main__.py:1-14`: console logging first, then the hook and
    `atexit.register(stop.trigger, 'exit')`, all before `QApplication`. `MainWindow.__init__` registers `'dmx'` and
-   `'midi'`; switching Control Mode to MIDI re-arms SPACE; `closeEvent` unregisters both last. Plan:
+   `'midi'`; switching Control Mode to MIDI, or opening a MIDI port, re-arms SPACE; `closeEvent` unregisters both
+   last. Plan:
    `docs/plans/task-3-emergency-stop.md`.
 4. `settings_store.py:83-87`: deferred sync + `flush()`; `main_window.py` flushes in `closeEvent` before step 1's
    `dmx_out.close()`; rewrite `tests/test_settings_store.py:77-81`.
@@ -117,8 +128,10 @@ owns its timer. `DMXOutput` owns the blackout policy.
 - CI: everything above (fake sockets, fake audio, offscreen Qt). The abort case is testable because the hook replaces
   `qFatal`: raise inside a slot connected to a test signal, assert the process is still here and `fake_udp.sent` ends
   with three dark frames. The FFT-thread case runs with the DMX timer going and the FFT thread's sends slowed down,
-  and asserts no non-dark frame follows the first dark one. `atexit` via a subprocess, also with the Qt object
-  deleted.
+  and asserts no non-dark frame follows the first dark one (and that a tick actually ran during the panic). The send
+  lock, the second blackout after a stuck send and the SPACE arm's lock each have a deterministic test that pauses
+  one thread mid-step (a patched `build_artdmx`, or the arm's read) and fails without the lock or fix. `atexit` via a
+  subprocess, also with the Qt object deleted.
 - Hardware: close the app with the laser lit; `configure()` to another IP while lit; pull the node's cable, then
   plug it back; and the DMX-loss behaviour of the CR011R itself (hold vs. dark), written into the README.
 
@@ -154,8 +167,12 @@ as another trigger of the same stop.
 - **Q9.** All-notes-off on which channels? **Decided: channel 1 only**, the only channel PyLZR sends on.
 - **Q10.** What if SPACE toggles rather than latches in SoundSwitch? **Decided: don't rely on it latching.** The SPACE
   note goes out only on the first emergency stop after MIDI output is (re)enabled; later stops send all-notes-off only.
-  Switching Control Mode to MIDI re-arms it. Whether SPACE latches is still worth knowing (manual check), but nothing
-  depends on it.
+  Switching Control Mode to MIDI re-arms it, and so does opening a MIDI port (Q12). Whether SPACE latches is still
+  worth knowing (manual check), but nothing depends on it.
 - **Q11.** Does a stop that couldn't deliver SPACE (no port open, Note ON failed) use up the arm?
   ASSUMPTION(Q11): no. The arm is used up by the first SPACE that reaches the port, so SoundSwitch still receives it
   at most once per enable. Making any stop use it up is one line in `MainWindow._midi_emergency_stop`.
+- **Q12.** Should opening a different MIDI port re-arm SPACE? **Decided: yes.** SoundSwitch on the new port hasn't
+  received SPACE through it. Every successful open re-arms (`MainWindow._open_midi_port`): the user choosing a port,
+  Reset, the saved port at startup, and the default port reconnecting (e.g. loopMIDI started after PyLZR). A failed
+  open leaves the arm as it was.

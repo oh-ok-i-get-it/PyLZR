@@ -62,6 +62,11 @@ class MainWindow(QWidget):
         self.library = FixtureLibrary(self.store.fixtures_folder)
         self._logged_fixture_problems: set[str] = set()     # each file problem is logged once per run
 
+        # SoundSwitch's blackout note: due on the next emergency stop in MIDI mode (Q10, Q12). Before the MIDI port
+        # opens, since opening one re-arms it
+        self._space_lock  = threading.Lock()     # guards _space_armed; the stop may run on any thread
+        self._space_armed = True
+
         # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
         self._open_saved_midi_port()
@@ -72,9 +77,7 @@ class MainWindow(QWidget):
         self.output   = OutputSwitch({'MIDI': self.midi_out, 'DMX': self.dmx_out}, CONTROL_MODES[0])
 
         # Emergency stop: on an unhandled exception, DMX goes dark first, then SoundSwitch gets all notes off and,
-        # once per MIDI enable, its blackout note (design Q2, Q10)
-        self._space_lock  = threading.Lock()     # guards _space_armed; the stop may run on any thread
-        self._space_armed = True
+        # once per MIDI enable or port, its blackout note (design Q2, Q10, Q12)
         self.safety = safety if safety is not None else EmergencyStop()
         self.safety.register('dmx', self.dmx_out.panic)
         self.safety.register('midi', self._midi_emergency_stop)
@@ -160,7 +163,7 @@ class MainWindow(QWidget):
     def _open_saved_midi_port(self):
         saved = self.store.get('midi/port')
         if saved and saved in self.midi_out.list_ports():
-            self.midi_out.open(saved)
+            self._open_midi_port(saved)
 
     def _apply_settings(self, get):
         """Set every saved control from get(key) (stored or default values)."""
@@ -192,7 +195,7 @@ class MainWindow(QWidget):
             self._show_audio_device(ok=True)
         default_port = self.midi_out.default_port()
         if self.midi_out.port_label != default_port:
-            self.midi_out.open(default_port)
+            self._open_midi_port(default_port)
         self._refresh_midi_ports()
         self.store.clear()
         log.info('Settings reset to defaults', extra={'tone': Tone.MUTED})
@@ -261,12 +264,12 @@ class MainWindow(QWidget):
     def _refresh_midi_ports(self):
         # Retry the default port while disconnected, e.g. loopMIDI started after PyLZR
         if not self.midi_out.connected:
-            self.midi_out.open(self.midi_out.default_port())
+            self._open_midi_port(self.midi_out.default_port())
         self.settings_panel.set_midi_ports(self.midi_out.list_ports(), self.midi_out.port_label)
         self.settings_panel.set_midi_status(self.midi_out.connected, self.midi_out.port_name)
 
     def _on_midi_port_changed(self, label: str):
-        if self.midi_out.open(label):
+        if self._open_midi_port(label):
             self.store.set('midi/port', label)
         self._refresh_midi_ports()
 
@@ -277,10 +280,9 @@ class MainWindow(QWidget):
     def _on_control_mode_changed(self, mode: str):
         """Route cues to `mode`'s output. DMX sends only while chosen; leaving
         it blacks the fixtures out and closes the channel tester."""
-        self.output.select(mode)
         if mode == 'MIDI':
-            with self._space_lock:
-                self._space_armed = True          # MIDI (re)enabled: the next emergency stop sends SPACE again (Q10)
+            self._rearm_space()                   # before select(): a stop in between still sees DMX, keeps the arm
+        self.output.select(mode)
         dmx = mode == 'DMX'
         if dmx:
             self.dmx_out.start()
@@ -383,8 +385,21 @@ class MainWindow(QWidget):
             space, self._space_armed = self._space_armed, False
         sent = self.midi_out.panic(BLACKOUT_NOTE if space else None)
         if space and not sent:                   # SPACE never reached the port: still due (ASSUMPTION Q11)
-            with self._space_lock:
-                self._space_armed = True
+            self._rearm_space()
+
+    def _rearm_space(self):
+        """The next emergency stop in MIDI mode sends SPACE again: MIDI was
+        (re)enabled (Q10) or a MIDI port was opened (Q12)."""
+        with self._space_lock:
+            self._space_armed = True
+
+    def _open_midi_port(self, label: str | None) -> bool:
+        """midi_out.open(label); a port that opens re-arms SPACE (Q12):
+        SoundSwitch on it hasn't had SPACE through this connection."""
+        if not self.midi_out.open(label):
+            return False
+        self._rearm_space()
+        return True
 
     # ------------------------------------------------------------------
     # Qt event overrides

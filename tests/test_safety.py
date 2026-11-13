@@ -26,6 +26,7 @@ from fakes import udp as fake_udp
 from fakes.udp import FakeSocket
 from helpers import dmx_packets, note_messages, note_ons, tone_chunks, wait_for_note_offs, wait_until
 from pylzr.core.safety import EmergencyStop, install_excepthook
+from pylzr.dmx.dmx_output import BLACKOUT_REPEATS
 
 SPACE_ON  = [0x90, 106, 112]
 SPACE_OFF = [0x80, 106, 0]
@@ -361,15 +362,33 @@ def test_no_show_frame_follows_the_blackout_when_the_fft_thread_raises(safety, m
     w.dmx_out.universe.set(1, 255)                       # every frame before the stop is lit
     set_mode(w, 'DMX')
     real_sendto = FakeSocket.sendto
+    panic_sends = {'started': 0, 'finished': 0}
 
     def slow_off_main(self, data, address):
-        if threading.current_thread() is not threading.main_thread():
-            time.sleep(0.02)                             # panic() spans more than two 25 ms-timer ticks... nearly
-        return real_sendto(self, data, address)
+        off_main = threading.current_thread() is not threading.main_thread()
+        if off_main:
+            panic_sends['started'] += 1
+            time.sleep(0.02)                             # panic()'s three sends span more than two 25 ms ticks
+        try:
+            return real_sendto(self, data, address)
+        finally:
+            if off_main:
+                panic_sends['finished'] += 1
+
+    real_send = w.dmx_out._send
+    ticks_during_panic = 0
+
+    def counting_send(data):                             # the GUI thread's sends (its timer ticks)
+        nonlocal ticks_during_panic
+        if panic_sends['started'] and panic_sends['finished'] < BLACKOUT_REPEATS and data != bytes(512):
+            ticks_during_panic += 1
+        real_send(data)
 
     monkeypatch.setattr(FakeSocket, 'sendto', slow_off_main)
+    monkeypatch.setattr(w.dmx_out, '_send', counting_send)
     _deliver_one_chunk(w)
     wait_until(lambda: not w.dmx_out.active)
+    assert ticks_during_panic > 0                        # the race was exercised: a tick ran while panic() was sending
     sent = frames()
     first_dark = next(i for i, f in enumerate(sent) if f == bytes(512))
     assert first_dark > 0
@@ -414,20 +433,59 @@ def test_space_stays_armed_until_it_reaches_the_port(make_window):
 
 
 def test_two_stops_at_once_send_space_once(make_window):
+    """Deterministic: a second stop starts on another thread while the first
+    is between reading the SPACE arm and clearing it. With the arm's lock the
+    second waits for the first's test-and-clear; without it both see it armed."""
     w = make_window().window
-    barrier = threading.Barrier(2)
+    second = threading.Thread(target=w.safety.trigger, args=('second',))
 
-    def stop():
-        barrier.wait()
-        w.safety.trigger('t')
+    class ArmReadPauses(type(w)):
+        @property
+        def _space_armed(self):
+            armed = self.__dict__['_space_armed']
+            if threading.current_thread() is threading.main_thread() and second.ident is None:
+                second.start()
+                second.join(0.1)                         # with the lock, the second stop is still waiting for it
+            return armed
 
-    workers = [threading.Thread(target=stop) for _ in range(2)]
-    for t in workers:
-        t.start()
-    for t in workers:
-        t.join()
+        @_space_armed.setter
+        def _space_armed(self, value):
+            self.__dict__['_space_armed'] = value
+
+    w.__class__ = ArmReadPauses
+    w.safety.trigger('first')
+    second.join()
     msgs = note_messages()
     assert msgs.count(SPACE_ON) == 1 and msgs.count(ALL_OFF) == 2
+
+
+def test_a_stop_during_the_switch_to_midi_sends_space(make_window, monkeypatch):
+    """A stop landing just after output.select('MIDI') (e.g. from the FFT
+    thread) finds SPACE already re-armed: the re-arm comes before the switch."""
+    w = make_window().window
+    w.safety.trigger('t')                                # uses up SPACE
+    set_mode(w, 'DMX')
+    real_select = w.output.select
+
+    def select_then_stop(mode):
+        real_select(mode)
+        w.safety.trigger('during the switch')
+
+    monkeypatch.setattr(w.output, 'select', select_then_stop)
+    set_mode(w, 'MIDI')
+    assert note_ons() == [[106, 112], [106, 112]]
+
+
+def test_opening_a_midi_port_rearms_space(make_window):
+    """Q12: SoundSwitch on a newly opened port hasn't had SPACE yet."""
+    fake_rtmidi.ports.append('PyLZR-MIDI 1')
+    w = make_window().window
+    w.safety.trigger('t')                                # SPACE to the virtual port
+    w.settings_panel.midi_port_changed.emit('PyLZR-MIDI 1')
+    assert w.midi_out.port_label == 'PyLZR-MIDI 1'
+    w.safety.trigger('t')
+    w.safety.trigger('t')
+    assert note_ons() == [[106, 112], [106, 112]]        # once per port: the third stop sends all-notes-off only
 
 
 def test_dmx_mode_stop_sends_no_midi_and_keeps_space_armed(make_window):

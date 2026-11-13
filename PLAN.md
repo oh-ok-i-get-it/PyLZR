@@ -48,10 +48,11 @@ does the same to the old node while active. Sequence numbers keep advancing (`_s
 ## Task 3 — Exception hook and emergency stop (P1) [careful] — DONE
 
 **Files:** new `src/pylzr/core/safety.py`; `src/pylzr/__main__.py:1-14`; `src/pylzr/dmx/dmx_output.py` (`panic()`,
-send lock and flag in `_send()` `:213-217`, flag cleared in `start()` `:152-161`); `src/pylzr/midi/midi_output.py`
+send lock and flag in `_send()` `:213-217`, panic ids in `start()` `:152-161` and `stop()`); `src/pylzr/midi/midi_output.py`
 (`panic(note)`, send lock); `src/pylzr/midi/key_map.py` + `midi/__init__.py` (`BLACKOUT_NOTE`);
 `src/pylzr/gui/main_window.py` (`:12` import, `:44` signature, registration after `:65`, re-arm in
-`_on_control_mode_changed` `:261-272`, new method before `:352`, unregister in `closeEvent` `:371-382`);
+`_on_control_mode_changed` `:261-272`, new methods before `:352`, every `midi_out.open` through
+`_open_midi_port`, unregister in `closeEvent` `:371-382`);
 `tests/conftest.py:101-111`; new `tests/test_safety.py`; new tests in `tests/test_dmx_output.py`,
 `tests/test_midi_output.py`, `tests/test_key_map.py`. Implementation plan: `docs/plans/task-3-emergency-stop.md`.
 
@@ -60,14 +61,17 @@ send lock and flag in `_send()` `:213-217`, flag cleared in `start()` `:152-161`
 traceback at ERROR (a repeating error: once, then one line at the 2nd, 4th, 8th… time, Q7), then, after the first
 error only, follows design Q1: the app keeps running with DMX output stopped and the Control Mode dropdown untouched;
 the user re-enables DMX by switching Control Mode. A `KeyboardInterrupt` (Ctrl+C) triggers the stop, then quits
-through the normal close path (Q8). `DMXOutput.panic()` first sets a flag that makes `_send()` refuse every non-dark
-frame until the next `start()` (checked under a short send lock, so no show frame can follow the blackout). It then
-sends `BLACKOUT_REPEATS` dark frames straight through the sender, swallowing every exception, and asks the GUI thread
-to stop the timer through a queued signal (`stop()` blacks out once more). `main()` sets up console logging first,
+through the normal close path (Q8). `DMXOutput.panic()` first takes a new panic id, which makes `_send()` refuse every
+non-dark frame until a `start()` that comes after a `stop()` (checked under a short send lock, so no show frame can
+follow the blackout; a `start()` racing with the panic doesn't end it). If the output may be lit (`_may_be_lit`, set
+before start()'s first frame), it then sends `BLACKOUT_REPEATS` dark frames straight through the sender, swallowing
+every exception; if the lock took over 5 ms it sends them without it, then again once the send holding it is done.
+It asks the GUI thread to stop the timer through a queued signal (`stop()` blacks out once more). `main()` sets up console logging first,
 then installs the hook and the `atexit` stop before any Qt object exists. The window registers `dmx_out.panic` as
 `'dmx'` and a second stop, `'midi'` (Q2). In MIDI mode it sends MIDI all-notes-off, and on the first stop after MIDI
 was (re)enabled also the SPACE note (106, on and off), so SoundSwitch goes to its blackout look. Later stops send
-all-notes-off only, and switching Control Mode to MIDI re-arms SPACE (Q10). In DMX mode it sends nothing.
+all-notes-off only; switching Control Mode to MIDI (re-armed before the switch) or opening a MIDI port re-arms SPACE
+(Q10, Q12). In DMX mode it sends nothing.
 `MIDIOutput.panic()` never raises and sends nothing while no MIDI port is open.
 
 **Acceptance:**
@@ -78,8 +82,12 @@ all-notes-off only, and switching Control Mode to MIDI re-arms SPACE (Q10). In D
   FFT thread's sends slowed down: no non-dark frame follows the first dark frame.
 - In MIDI mode (DMX off): no DMX is sent; the SPACE note and all-notes-off are sent (all-notes-off first, then SPACE
   on and off); and the app keeps running. With no MIDI port open, nothing is sent and the app keeps running.
-- A second stop in MIDI mode sends all-notes-off only; after switching Control Mode to MIDI again, the next stop sends
-  SPACE again. Two stops at once on two threads send SPACE once.
+- A second stop in MIDI mode sends all-notes-off only; after switching Control Mode to MIDI again, or opening a MIDI
+  port, the next stop sends SPACE again. Two stops at once on two threads send SPACE once (deterministic test: fails
+  without the arm's lock).
+- The send lock and the second blackout after a send stuck past 5 ms each have a deterministic test that fails
+  without them; a `start()` before the panic's own `stop()` sends nothing lit; a panic right after start()'s first
+  frame blacks out.
 - In DMX mode the emergency stop sends no MIDI.
 - After the stop the Control Mode dropdown is unchanged; switching Control Mode to MIDI and back to DMX sends DMX again.
 - Ctrl+C (a `KeyboardInterrupt` in a slot) triggers the stop, then the window closes through `closeEvent` (engine shut
@@ -89,8 +97,8 @@ all-notes-off only, and switching Control Mode to MIDI re-arms SPACE (Q10). In D
   sender, exits via `sys.exit`).
 
 **Verify:** `pytest tests/test_safety.py tests/test_dmx_output.py tests/test_midi_output.py -q`; the race tests 20×
-in a row; full suite (1373); manual: run the app, inject `raise` in a handler, watch the console and the DMX
-indicator; Ctrl+C in the terminal; MIDI mode with a MIDI monitor.
+in a row; full suite (1379 after the review follow-up, plan §10); manual: run the app, inject `raise` in a handler,
+watch the console and the DMX indicator; Ctrl+C in the terminal; MIDI mode with a MIDI monitor.
 
 ---
 
