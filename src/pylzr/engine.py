@@ -164,31 +164,34 @@ class AudioEngine(QObject):
         if self.gain != 1.0:
             chunk = np.clip(chunk.astype(np.float32) * self.gain, -32767, 32767).astype(np.int16)
 
+        # Queue the FFT before any redraw so analysis and the cue start sooner.
+        self._process_audio.emit(chunk)
+
         if self.measure_level:
             peak = float(np.max(np.abs(chunk))) / 32767.0
             self.level_measured.emit(peak, peak >= 0.99)
 
         self.waveform_ready.emit(chunk)
-        self._process_audio.emit(chunk)
 
     @pyqtSlot(np.ndarray)
     def _on_spectrum(self, spectrum: np.ndarray):
         self._fft_frames += 1
-        self.spectrum_ready.emit(spectrum)
 
         low, _, high, _ = self.bands.split(spectrum)
         result = self.analyzer.push(low.mean(), high.mean())
-        if result is None:
-            return
-        low_avg, high_avg = result
-        self._last_averages = result
-        sm = self.sound_mode
-        sm.advance_dm_counter()
-        if sm.enabled:
-            sm.check_mode(low_avg, high_avg)
-        self.averages_ready.emit(low_avg, high_avg)
-        self.modes_updated.emit(sm.low_mode, sm.high_mode, sm.dm_mode_label, sm.dm_countdown)
-        log.debug(f'LOW: {low_avg:.2f}  HIGH: {high_avg:.2f}')
+        if result is not None:
+            low_avg, high_avg = result
+            self._last_averages = result
+            sm = self.sound_mode
+            sm.advance_dm_counter()
+            if sm.enabled:
+                sm.check_mode(low_avg, high_avg)
+            self.averages_ready.emit(low_avg, high_avg)
+            self.modes_updated.emit(sm.low_mode, sm.high_mode, sm.dm_mode_label, sm.dm_countdown)
+            log.debug(f'LOW: {low_avg:.2f}  HIGH: {high_avg:.2f}')
+
+        # The plot redraw goes last, after the cue has been sent, on every frame.
+        self.spectrum_ready.emit(spectrum)
 
     def _report_diagnostics(self):
         fps, self._fft_frames = self._fft_frames, 0

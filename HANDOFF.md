@@ -2,20 +2,24 @@
 
 ## Current state
 
-Branch `hayden/components-pt3`. Task 3 (exception hook and emergency stop, P1) is committed as `efa64b9`, and the
-review follow-up as `c5a2601`. Task 4 (debounced settings writes, P5) is **implemented, not committed**, following
-`docs/plans/task-4-debounced-settings.md` exactly; marked DONE in PLAN.md.
+Branch `hayden/components-pt3`. Task 3 is committed (`efa64b9`, follow-up `c5a2601`) and Task 4 as `37c8dc0`. Task 5
+(cue logic before display redraws, P7) is **implemented, not committed**; marked DONE in PLAN.md. This was the last task
+in PLAN.md.
 
-What changed:
-- `gui/settings_store.py`: `FLUSH_MS = 400`; `_DeferredSettings` (a `QSettings` that ignores `UpdateRequest`, so Qt's
-  own write on the next event-loop pass is held back, Q14); `_app_exists()`; `SettingsStore` gets a single-shot flush
-  timer, `pending`, `flush()`, `_sync()`; `set()` restarts the timer (or syncs at once with no `QCoreApplication`);
-  `clear()` stops the timer and writes at once; a failed write is logged once (WARNING, `pylzr.settings`).
-- `gui/main_window.py`: `closeEvent` calls `self.store.flush()` right after `dmx_out.stop()` and
-  `_close_dmx_tester()`, before `engine.shutdown()`; the class docstring and the `closeEvent` comment are updated.
-- Tests: `test_each_change_is_written_to_disk_immediately` replaced by 9 store tests; 1 window test in
-  `test_settings_store.py` (close order and disk); 2 in `test_safety.py` (Ctrl+C quit writes, saving survives an
-  unhandled exception). 1379 - 1 + 12 = 1390.
+What changed (Task 5):
+- `engine.py` `_process_chunk`: gain, then `_process_audio.emit` (queues the FFT), then level, then `waveform_ready`.
+- `engine.py` `_on_spectrum`: count the frame, split, push, sound mode, `averages_ready` / `modes_updated`, and
+  `spectrum_ready` last. No values change.
+- `tests/test_engine.py`: `test_cue_logic_runs_before_display_redraws` (DirectConnection recorders; 20 chunks = one
+  window; per chunk `_process_audio < waveform_ready`; `modes_updated` before the window's last `spectrum_ready`).
+
+Results (Task 5):
+- `pytest -q`: 1391 passed, three runs in a row (11.64 s, 11.60 s, 11.60 s). `ruff check .`: clean. `tests/golden/`
+  unchanged (`git status` shows only engine.py, test_engine.py, PLAN.md and this file). `test_pipeline_golden.py` passes
+  unchanged.
+- With the old `engine.py` restored (from `HEAD`), the new test fails (the other 18 engine tests pass); the fix was put
+  back afterwards.
+- No manual checks: the plan lists none for this task.
 
 Results (Task 4):
 - `pytest -q`: 1390 passed, three runs in a row (11.55 s, 11.86 s, 11.61 s; baseline 11.57 s). `ruff check .`: clean.
@@ -44,7 +48,10 @@ Results (Task 3):
 
 ## Next task
 
-Task 5 (cue logic before display redraws, P7) in `PLAN.md`. Not started. Task 4 needs reviewing and committing first.
+PLAN.md is finished once Task 5 is reviewed and committed. Per "After task 5": (1) hardware check (you): close PyLZR
+while the Gruolin is lit; pull the node's cable, then plug it back; note what the CR011R does without DMX (hold or
+dark) and record it in the README's DMX section. (2) Then the D2 remainder (components 11 and 12), then the D3 prep
+refactors, in the order in `ROADMAP.md`.
 
 ## Assumptions and deviations to confirm
 
@@ -68,3 +75,10 @@ Task 5 (cue logic before display redraws, P7) in `PLAN.md`. Not started. Task 4 
 9. Task 4, test #10 (`test_closing_right_after_a_change_writes_it_after_the_blackout`) counts all-zero DMX frames
    seen when `flush` runs, as the plan says. Moving the flush before `dmx_out.stop()` does fail it, so the count
    does discriminate in practice.
+10. **Task 5, deviation to confirm:** the plan says to emit `spectrum_ready` last, but `_on_spectrum` returned early on
+    the frames that don't complete an averaging window. Moving the emit to the end of the old shape would have dropped
+    `spectrum_ready` on most frames (19 of 20 at the default count rate). I replaced the early return with an
+    `if result is not None:` block so `spectrum_ready` still fires on every frame, after the cue. Emitted frames and
+    values are unchanged (the golden test confirms).
+11. Task 5: the ordering test pairs `modes_updated` with the window's last `spectrum_ready`, since `modes_updated` only
+    fires once per window; the plan's "for each frame" holds for the frames that produce a cue.

@@ -165,3 +165,25 @@ def test_turning_sound_mode_on_sends_current_cue_at_once(engine):
 def test_turning_sound_mode_on_before_any_audio_sends_nothing(engine):
     engine.set_sound_mode(True)
     assert engine.output.notes == []
+
+
+def test_cue_logic_runs_before_display_redraws(engine):
+    """Same thread, same values, less time before the cue (audit P7): the FFT is queued before the
+    waveform is drawn, and the cue (modes_updated) is out before the spectrum plot is redrawn."""
+    events = []
+    for name in ('_process_audio', 'waveform_ready', 'modes_updated', 'spectrum_ready'):
+        getattr(engine, name).connect(lambda *_, n=name: events.append(n), Qt.DirectConnection)
+    engine.set_sound_mode(True)
+    feed(engine, tone_chunks(20, (80, 400)))            # exactly one averaging window
+
+    def positions(name):
+        return [i for i, e in enumerate(events) if e == name]
+
+    queued, drawn = positions('_process_audio'), positions('waveform_ready')
+    assert len(queued) == len(drawn) == 20
+    assert all(q < d for q, d in zip(queued, drawn, strict=True))     # for each chunk
+
+    cues, plots = positions('modes_updated'), positions('spectrum_ready')
+    assert len(cues) == 1 and len(plots) == 20
+    assert cues[0] < plots[-1]                           # the window's last frame: cue first, then the plot
+    assert engine.output.notes == [82]                   # values unchanged

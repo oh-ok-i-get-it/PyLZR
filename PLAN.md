@@ -137,7 +137,7 @@ flushes after the blackout and before anything that can block.
 
 ---
 
-## Task 5 — Cue logic before display redraws (P7) [mechanical]
+## Task 5 — Cue logic before display redraws (P7) [mechanical] — DONE
 
 **Files:** `src/pylzr/engine.py:154-169` (`_process_chunk`), `:171-188` (`_on_spectrum`); new test in
 `tests/test_engine.py`.
