@@ -369,10 +369,14 @@ class MainWindow(QWidget):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        # The blackout goes out first, before anything that could block
+        # (closing audio, waiting for the FFT thread); the socket is released
+        # last. See docs/design/safety-phase.md.
+        self.dmx_out.stop()
         self._close_dmx_tester()
         self.engine.shutdown()
-        self.dmx_out.close()        # blacks out the fixtures if DMX was sending
         self.discovery.close()
         self.midi_out.close()
+        self.dmx_out.close()
         logging.getLogger(LOGGER_NAME).removeHandler(self.log_panel.log_handler)
         super().closeEvent(event)

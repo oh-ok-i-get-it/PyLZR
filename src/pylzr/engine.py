@@ -14,6 +14,8 @@ from .core.protocols import NoteOutput
 
 log = get_logger('engine')
 
+FFT_THREAD_WAIT_MS = 2000   # how long shutdown() waits for the FFT thread before carrying on
+
 
 class AudioEngine(QObject):
     """The sound-reactive pipeline, independent of any GUI:
@@ -89,7 +91,8 @@ class AudioEngine(QObject):
         self.stop()
         self.audio.close()
         self.fft_thread.quit()
-        self.fft_thread.wait()
+        if not self.fft_thread.wait(FFT_THREAD_WAIT_MS):
+            log.warning(f'FFT thread did not stop within {FFT_THREAD_WAIT_MS} ms; continuing shutdown')
 
     # ── Settings ───────────────────────────────────────────────────────────
 

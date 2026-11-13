@@ -180,6 +180,25 @@ def test_closing_the_app_blacks_out_and_releases_the_socket(harness):
     assert fake_udp.sockets[0].closed == 1               # the sending socket
 
 
+def test_blackout_goes_out_before_the_audio_stream_is_closed(harness, monkeypatch):
+    """Closing audio or waiting for the FFT thread could block; the laser must
+    already be dark by then."""
+    from pylzr.audio.audio_input import AudioInput
+    w = harness.window
+    set_mode(harness, 'DMX')
+    w.dmx_out.universe.set(1, 255)
+    dark_frames_when_audio_closed = []
+    original_close = AudioInput.close
+
+    def close(self):
+        dark_frames_when_audio_closed.append(sum(f == bytes(512) for f in frames()))
+        original_close(self)
+    monkeypatch.setattr(AudioInput, 'close', close)
+    harness.close()
+    assert dark_frames_when_audio_closed and dark_frames_when_audio_closed[0] >= 1
+    assert frames()[-1] == bytes(512)
+
+
 def test_closing_the_app_closes_the_tester(harness):
     set_mode(harness, 'DMX')
     tester = open_tester(harness)

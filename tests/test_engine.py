@@ -140,6 +140,18 @@ def test_shutdown_stops_everything_and_is_idempotent(engine):
     engine.shutdown()      # second call is a no-op (the fixture calls it again too)
 
 
+def test_shutdown_continues_if_the_fft_thread_does_not_stop(engine, caplog):
+    """A stuck FFT thread must not keep the app (and the DMX blackout) from finishing."""
+    from PyQt5.QtCore import QThread
+    thread = engine.fft_thread
+    thread.wait = lambda *_args: False                # as if it never finished
+    with caplog.at_level('WARNING', logger='pylzr'):
+        engine.shutdown()
+    assert any('FFT thread did not stop' in r.getMessage() for r in caplog.records)
+    assert fake_pyaudio.streams[-1].closed
+    QThread.wait(thread)                              # really join it now (quit() was called)
+
+
 def test_turning_sound_mode_on_sends_current_cue_at_once(engine):
     feed(engine, tone_chunks(20, (80, 400)))          # analysed while off: LOW 2 / HIGH 0
     assert engine.output.notes == []

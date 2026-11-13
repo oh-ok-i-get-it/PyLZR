@@ -8,7 +8,7 @@ Tags: **[mechanical]** = the change is fully specified here; **[careful]** = jud
 
 ---
 
-## Task 1 — Blackout before anything that can block on exit (P2) [mechanical]
+## Task 1 — Blackout before anything that can block on exit (P2) [mechanical] — DONE
 
 **Files:** `src/pylzr/gui/main_window.py:371-378` (`closeEvent`), `src/pylzr/engine.py:84-92` (`shutdown`).
 
