@@ -105,8 +105,8 @@ def make_window(qapp):
 
     created = []
 
-    def factory() -> WindowHarness:
-        harness = WindowHarness(MainWindow())
+    def factory(**kwargs) -> WindowHarness:
+        harness = WindowHarness(MainWindow(**kwargs))
         created.append(harness)
         return harness
 

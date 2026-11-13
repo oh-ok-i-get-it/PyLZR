@@ -1,5 +1,6 @@
 import ipaddress
 import socket
+import threading
 from collections.abc import Callable, Sequence
 
 from PyQt5.QtCore import QObject, QTimer, Qt, pyqtSignal
@@ -20,6 +21,8 @@ _BLACKOUT = bytes(DMX_CHANNELS)
 # ASSUMPTION(Q5): back to back rather than spread over ticks, since the timer
 # may be what failed (docs/design/safety-phase.md, open question Q5).
 BLACKOUT_REPEATS = 3
+
+_PANIC_LOCK_TIMEOUT_S = 0.005   # panic() waits at most this long for a send in progress (one sendto: microseconds)
 
 # While sending, ask the node "are you there?" every 3 s (Art-Net suggests
 # 2.5–3 s); an answer counts for 10 s, so one lost reply doesn't matter.
@@ -61,13 +64,18 @@ class DMXOutput(QObject):
     Holds a DMXUniverse and, while started, sends it to the node
     DMX_REFRESH_HZ times a second (DMX is a continuous stream: the node and
     fixtures expect the whole frame over and over). Everything runs on the
-    GUI thread; one send takes microseconds.
+    GUI thread except panic(), which any thread may call; one send takes
+    microseconds.
 
     start() / stop() control sending; stop() and close() send the blackout
     frame BLACKOUT_REPEATS times first, so the laser goes dark rather than
     holding its last look even if a datagram is lost.
     set_test_values() / clear_test_values() drive the universe's override
     layer (the channel tester).
+    panic() is the emergency stop (docs/design/safety-phase.md): from the
+    moment it starts only dark frames go out, until the next start(); it sends
+    the blackout BLACKOUT_REPEATS times at once, from whatever thread calls it,
+    then has this object's thread run stop().
 
     status_changed(state, detail) is emitted only when either changes:
       'off'        not sending                         'Off'
@@ -89,6 +97,7 @@ class DMXOutput(QObject):
     """
 
     status_changed = pyqtSignal(str, str)   # state, detail
+    _stop_requested = pyqtSignal()           # from panic(), any thread: stop() runs on this object's thread
 
     def __init__(self, node_ip: str = DMX_DEFAULT_NODE_IP, port: PortAddress | None = None,
                  parent: QObject | None = None,
@@ -105,6 +114,8 @@ class DMXOutput(QObject):
         self._ticks = 0
         self._source: str | None = None
         self._closed = False
+        self._send_lock = threading.Lock()   # one frame at a time: panic() (any thread) vs the GUI thread's sends
+        self._panicked  = False              # set first thing by panic(): only dark frames go out until start()
         self.state, self.detail = 'off', 'Off'
 
         self._discovery = discovery
@@ -117,6 +128,7 @@ class DMXOutput(QObject):
         self._timer.setTimerType(Qt.PreciseTimer)   # steady frame spacing
         self._timer.setInterval(round(1000 / DMX_REFRESH_HZ))
         self._timer.timeout.connect(self._tick)
+        self._stop_requested.connect(self.stop, Qt.QueuedConnection)
 
     @property
     def node_ip(self) -> str:
@@ -154,6 +166,9 @@ class DMXOutput(QObject):
             raise RuntimeError('DMXOutput is closed')
         if self.active:
             return
+        if self._panicked:
+            self._panicked = False
+            log.info('DMX: sending again after the emergency stop', extra={'tone': Tone.ON})
         self._ticks = 0
         self._watch.restart()
         self._check_route()
@@ -177,6 +192,54 @@ class DMXOutput(QObject):
         self.stop()
         self._sender.close()
         self._closed = True
+
+    def panic(self):
+        """Emergency blackout, from any thread (the exception hook calls it).
+        First stops every later show frame (only dark frames go out until the
+        next start()); then, if the output may be lit, sends the blackout
+        BLACKOUT_REPEATS times straight through the socket; then queues stop()
+        on this object's thread (it blacks out once more and stops the timer:
+        on the GUI thread's next event-loop pass, even if that thread is the
+        one that raised). Uses only Python state before the sends, so it works
+        at exit after the window and its Qt objects are gone. Never raises."""
+        try:
+            self._panicked = True                          # first: from here on _send() lets only dark frames out
+            if self._closed:
+                log.debug('DMX: emergency stop: output closed, nothing to black out')
+                return
+            if self.state == 'off':                        # never sent, or stop() already blacked out (M5)
+                log.debug('DMX: emergency stop: not sending, nothing to black out')
+            else:
+                self._send_blackout_now()
+            try:
+                self._stop_requested.emit()                # always, so a start() racing with this one is stopped too
+            except RuntimeError:                           # the Qt object is gone (at exit): nothing left to stop
+                log.debug('DMX: emergency stop: Qt object gone, stop() not queued')
+        except BaseException:
+            log.exception('DMX: emergency stop failed')
+
+    def _send_blackout_now(self):
+        """panic()'s blackout: BLACKOUT_REPEATS dark frames under the send lock.
+        Logs only after the lock is released."""
+        locked = self._send_lock.acquire(timeout=_PANIC_LOCK_TIMEOUT_S)
+        errors = []
+        try:
+            sender, port = self._sender, self.port         # one read each: configure() may swap them
+            for _ in range(BLACKOUT_REPEATS):
+                try:
+                    self._sequence = next_sequence(self._sequence)
+                    sender.send(build_artdmx(_BLACKOUT, port, self._sequence))
+                except Exception as e:
+                    errors.append(e)
+        finally:
+            if locked:
+                self._send_lock.release()
+        if not locked:
+            log.warning('DMX: emergency blackout sent without the send lock (a send seemed stuck)')
+        for e in errors:
+            log.error(f'DMX: emergency blackout frame not sent: {e!r}')
+        log.warning(f'DMX: emergency blackout sent ({BLACKOUT_REPEATS - len(errors)} of {BLACKOUT_REPEATS} frames)',
+                    extra={'tone': Tone.OFF})
 
     # ── Content ─────────────────────────────────────────────────────────
 
@@ -211,9 +274,12 @@ class DMXOutput(QObject):
             self._update_status()
 
     def _send(self, data: bytes):
-        self._sequence = next_sequence(self._sequence)
-        self._sender.send(build_artdmx(data, self.port, self._sequence))
-        if self.active:
+        with self._send_lock:                       # check and send as one step, so panic() can't slip in between
+            if self._panicked and data != _BLACKOUT:
+                return                              # after panic(): nothing but dark frames, until start()
+            self._sequence = next_sequence(self._sequence)
+            self._sender.send(build_artdmx(data, self.port, self._sequence))
+        if self.active:                             # outside the lock: may emit signals and log
             self._update_status()
 
     def _check_route(self):

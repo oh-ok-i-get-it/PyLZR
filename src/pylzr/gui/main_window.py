@@ -1,4 +1,5 @@
 import logging
+import threading
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QKeyEvent
@@ -8,8 +9,9 @@ from PyQt5.QtGui import QDesktopServices
 from ..core import CONTROL_MODES, WINDOW_W, WINDOW_H
 from ..core.app_logger import LOGGER_NAME, Tone, get_logger
 from ..core.output_switch import OutputSwitch
+from ..core.safety import EmergencyStop
 from ..engine   import AudioEngine
-from ..midi     import MIDIOutput, KeyboardMapper
+from ..midi     import BLACKOUT_NOTE, MIDIOutput, KeyboardMapper
 from ..dmx      import DMXOutput, NodeDiscovery, PortAddress, node_choices
 from ..fixtures import FixtureLibrary, Patch
 from .                import style, theme
@@ -35,13 +37,18 @@ class MainWindow(QWidget):
     fixtures folder next to the settings file) is shown in Settings → DMX,
     re-read each time Settings opens, and the patch is saved on every edit.
 
+    On an unhandled exception the emergency stop (`safety`, made by main())
+    blacks out DMX and, in MIDI mode, sends all notes off and, once per MIDI
+    enable, SoundSwitch's blackout note; the window keeps running with DMX
+    stopped (docs/design/safety-phase.md).
+
     This class only connects things — the pipeline lives in engine.py and
     the audio/, analysis/, midi/, dmx/ and fixtures/ packages. User settings
     are restored from the SettingsStore at startup and saved whenever they
     change.
     """
 
-    def __init__(self):
+    def __init__(self, safety: EmergencyStop | None = None):
         super().__init__()
         self.setWindowTitle('PyLZR')
         style.dark_title_bar(self)                 # Windows only; no-op elsewhere
@@ -63,6 +70,15 @@ class MainWindow(QWidget):
                                   PortAddress(*self.store.get('dmx/port_address')), parent=self,
                                   discovery=self.discovery)
         self.output   = OutputSwitch({'MIDI': self.midi_out, 'DMX': self.dmx_out}, CONTROL_MODES[0])
+
+        # Emergency stop: on an unhandled exception, DMX goes dark first, then SoundSwitch gets all notes off and,
+        # once per MIDI enable, its blackout note (design Q2, Q10)
+        self._space_lock  = threading.Lock()     # guards _space_armed; the stop may run on any thread
+        self._space_armed = True
+        self.safety = safety if safety is not None else EmergencyStop()
+        self.safety.register('dmx', self.dmx_out.panic)
+        self.safety.register('midi', self._midi_emergency_stop)
+
         self.engine   = AudioEngine(self.output, parent=self,
                                     device_name=self.store.get('audio/device') or None)
         self.key_map  = KeyboardMapper(self.output, is_blocked=lambda: self.engine.sound_mode.enabled)
@@ -262,6 +278,9 @@ class MainWindow(QWidget):
         """Route cues to `mode`'s output. DMX sends only while chosen; leaving
         it blacks the fixtures out and closes the channel tester."""
         self.output.select(mode)
+        if mode == 'MIDI':
+            with self._space_lock:
+                self._space_armed = True          # MIDI (re)enabled: the next emergency stop sends SPACE again (Q10)
         dmx = mode == 'DMX'
         if dmx:
             self.dmx_out.start()
@@ -350,6 +369,24 @@ class MainWindow(QWidget):
             self._dmx_tester.close()
 
     # ------------------------------------------------------------------
+    # Emergency stop
+    # ------------------------------------------------------------------
+
+    def _midi_emergency_stop(self):
+        """In MIDI mode: all notes off, and, the first time since MIDI was
+        (re)enabled, SPACE too (SoundSwitch's blackout look). Never twice,
+        since SoundSwitch might toggle on it (design Q10). Any thread; reads
+        only Python state; never raises."""
+        if self.output.active != 'MIDI':
+            return
+        with self._space_lock:
+            space, self._space_armed = self._space_armed, False
+        sent = self.midi_out.panic(BLACKOUT_NOTE if space else None)
+        if space and not sent:                   # SPACE never reached the port: still due (ASSUMPTION Q11)
+            with self._space_lock:
+                self._space_armed = True
+
+    # ------------------------------------------------------------------
     # Qt event overrides
     # ------------------------------------------------------------------
 
@@ -378,5 +415,7 @@ class MainWindow(QWidget):
         self.discovery.close()
         self.midi_out.close()
         self.dmx_out.close()
+        self.safety.unregister('dmx')            # last, so an exception above still reaches the stops
+        self.safety.unregister('midi')
         logging.getLogger(LOGGER_NAME).removeHandler(self.log_panel.log_handler)
         super().closeEvent(event)

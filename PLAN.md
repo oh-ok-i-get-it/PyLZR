@@ -1,7 +1,7 @@
 # PLAN: D2.5 fail-safe output (audit P2, P3, P1, P5, P7)
 
 Branch: `hayden/components-pt3`. Same procedure as D2: one task at a time, stop for review, commit message given.
-Design: `docs/design/safety-phase.md`. Every task ends with `pytest -q` (1313 tests today), `ruff check .`, and the
+Design: `docs/design/safety-phase.md`. Every task ends with `pytest -q` (1318 tests before Task 3), `ruff check .`, and the
 golden files unchanged (`tests/golden/pipeline.json`, `tests/golden/gruolin_renders.json`).
 
 Tags: **[mechanical]** = the change is fully specified here; **[careful]** = judgement calls, read the design first.
@@ -45,29 +45,52 @@ does the same to the old node while active. Sequence numbers keep advancing (`_s
 
 ---
 
-## Task 3 — Exception hook and emergency stop (P1) [careful]
+## Task 3 — Exception hook and emergency stop (P1) [careful] — DONE
 
-**Files:** new `src/pylzr/core/safety.py`; `src/pylzr/__main__.py:7-14`; `src/pylzr/dmx/dmx_output.py` (a `panic()`
-that never raises); `src/pylzr/gui/main_window.py:54-68` (registration); new `tests/test_safety.py`.
+**Files:** new `src/pylzr/core/safety.py`; `src/pylzr/__main__.py:1-14`; `src/pylzr/dmx/dmx_output.py` (`panic()`,
+send lock and flag in `_send()` `:213-217`, flag cleared in `start()` `:152-161`); `src/pylzr/midi/midi_output.py`
+(`panic(note)`, send lock); `src/pylzr/midi/key_map.py` + `midi/__init__.py` (`BLACKOUT_NOTE`);
+`src/pylzr/gui/main_window.py` (`:12` import, `:44` signature, registration after `:65`, re-arm in
+`_on_control_mode_changed` `:261-272`, new method before `:352`, unregister in `closeEvent` `:371-382`);
+`tests/conftest.py:101-111`; new `tests/test_safety.py`; new tests in `tests/test_dmx_output.py`,
+`tests/test_midi_output.py`, `tests/test_key_map.py`. Implementation plan: `docs/plans/task-3-emergency-stop.md`.
 
-**Change (see the design, "Interfaces"):** `EmergencyStop` holds stop callables; `install_excepthook()` sets
-`sys.excepthook` and `threading.excepthook` to a handler that logs the traceback at ERROR, calls
-`EmergencyStop.trigger()`, and then follows the decision in open question Q1 of the design (default until decided:
-the app keeps running with DMX output stopped and the Control Mode dropdown untouched). `DMXOutput.panic()` sends
-`BLACKOUT_REPEATS` dark frames straight through the sender, swallowing every exception, and asks the GUI thread to
-stop the timer through a queued signal. `main()` installs the hook before the window is built; the window registers
-`dmx_out.panic` and, in MIDI mode, nothing else.
+**Change (see the design, "Interfaces"):** `EmergencyStop` holds stop callables. `install_excepthook()` sets
+`sys.excepthook` and `threading.excepthook` to a handler that first calls `EmergencyStop.trigger()`, then logs the
+traceback at ERROR (a repeating error: once, then one line at the 2nd, 4th, 8th… time, Q7), then, after the first
+error only, follows design Q1: the app keeps running with DMX output stopped and the Control Mode dropdown untouched;
+the user re-enables DMX by switching Control Mode. A `KeyboardInterrupt` (Ctrl+C) triggers the stop, then quits
+through the normal close path (Q8). `DMXOutput.panic()` first sets a flag that makes `_send()` refuse every non-dark
+frame until the next `start()` (checked under a short send lock, so no show frame can follow the blackout). It then
+sends `BLACKOUT_REPEATS` dark frames straight through the sender, swallowing every exception, and asks the GUI thread
+to stop the timer through a queued signal (`stop()` blacks out once more). `main()` sets up console logging first,
+then installs the hook and the `atexit` stop before any Qt object exists. The window registers `dmx_out.panic` as
+`'dmx'` and a second stop, `'midi'` (Q2). In MIDI mode it sends MIDI all-notes-off, and on the first stop after MIDI
+was (re)enabled also the SPACE note (106, on and off), so SoundSwitch goes to its blackout look. Later stops send
+all-notes-off only, and switching Control Mode to MIDI re-arms SPACE (Q10). In DMX mode it sends nothing.
+`MIDIOutput.panic()` never raises and sends nothing while no MIDI port is open.
 
 **Acceptance:**
 - A `RuntimeError` raised inside a slot (e.g. a test-only slot connected to a signal, emitted from the GUI thread)
-  does not abort the process; the log shows the traceback once; 3 dark frames were sent; `dmx_out.active` is False.
-- The same from the FFT thread (raise in a monkeypatched `FFTWorker.process`).
-- With DMX off (MIDI mode) nothing is sent and the app keeps running.
+  does not abort the process; the log shows the traceback once; 3 dark frames are sent before the hook returns; after
+  the next event-loop pass `dmx_out.active` is False and the last 3 frames are dark.
+- The same from the FFT thread (raise in a monkeypatched `FFTWorker.process`) while the DMX timer is running, with the
+  FFT thread's sends slowed down: no non-dark frame follows the first dark frame.
+- In MIDI mode (DMX off): no DMX is sent; the SPACE note and all-notes-off are sent (all-notes-off first, then SPACE
+  on and off); and the app keeps running. With no MIDI port open, nothing is sent and the app keeps running.
+- A second stop in MIDI mode sends all-notes-off only; after switching Control Mode to MIDI again, the next stop sends
+  SPACE again. Two stops at once on two threads send SPACE once.
+- In DMX mode the emergency stop sends no MIDI.
+- After the stop the Control Mode dropdown is unchanged; switching Control Mode to MIDI and back to DMX sends DMX again.
+- Ctrl+C (a `KeyboardInterrupt` in a slot) triggers the stop, then the window closes through `closeEvent` (engine shut
+  down, sockets released, last 3 frames dark).
 - `trigger()` twice sends dark frames once per call but never raises, even if a stop callable raises.
-- `atexit` runs the stop too (test: subprocess that registers, sets a fake sender, exits via `sys.exit`).
+- `atexit` runs the stop too, also after the Qt object is deleted (test: subprocess that registers, sets a fake
+  sender, exits via `sys.exit`).
 
-**Verify:** `pytest tests/test_safety.py -q`; full suite; manual: run the app, inject `raise` in a handler, watch the
-console and the DMX indicator.
+**Verify:** `pytest tests/test_safety.py tests/test_dmx_output.py tests/test_midi_output.py -q`; the race tests 20×
+in a row; full suite (1373); manual: run the app, inject `raise` in a handler, watch the console and the DMX
+indicator; Ctrl+C in the terminal; MIDI mode with a MIDI monitor.
 
 ---
 
