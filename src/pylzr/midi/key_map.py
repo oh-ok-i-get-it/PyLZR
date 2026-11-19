@@ -31,6 +31,9 @@ _KEYS = [
 # Qt key code -> (MIDI note, display name)
 _KEY_TO_NOTE = {int(key): (_FIRST_NOTE + i, name) for i, (key, name) in enumerate(_KEYS)}
 
+# SPACE's note (106). SoundSwitch's blackout look is mapped to it; the emergency stop sends it in MIDI mode.
+BLACKOUT_NOTE = _KEY_TO_NOTE[int(Qt.Key_Space)][0]
+
 
 class KeyboardMapper:
     """Routes Qt key codes to MIDI notes via a static lookup table.

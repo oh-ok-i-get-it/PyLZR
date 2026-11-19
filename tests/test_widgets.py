@@ -5,7 +5,8 @@ from PyQt5.QtWidgets import QHBoxLayout, QLabel
 
 from pylzr.gui import panel_style, style, theme
 from pylzr.gui.widgets import (
-    Card, ElidedComboBox, IndicatorTile, PlainTextLabel, SectionTitle, ValueLabel, set_props,
+    Card, ElidedComboBox, ElidedLabel, IndicatorTile, PlainTextLabel, ProblemLine, SectionTitle, ValueLabel,
+    set_props,
 )
 
 
@@ -73,7 +74,7 @@ def test_every_role_has_rules():
     rules = style.role_rules()
     for role in ('section', 'card', 'tile', 'value', 'status', 'sound-mode', 'toolbar-button', 'log', 'label',
                  'detail', 'readout', 'input', 'small-button', 'popover', 'divider', 'meter', 'clip',
-                 'warning'):
+                 'warning', 'problem', 'plain-scroll'):
         assert f'[role="{role}"]' in rules, role
     assert rules in style.stylesheet()
 
@@ -108,3 +109,27 @@ def test_elided_combo_shows_its_placeholder(qapp):
     combo.setFixedWidth(200)
     combo.show()
     assert combo.currentIndex() == -1 and combo.shown_text() == 'No devices found'
+
+
+def test_elided_label_shortens_only_what_does_not_fit(qapp):
+    text = 'bindings/acme/laser.json: mappings[3].segment: no capability of "Colour" covers 300'
+    label = ElidedLabel(text)
+    label.setFixedWidth(120)
+    label.show()
+    assert label.text() == text == label.toolTip()
+    assert label.shown_text().endswith('…') and len(label.shown_text()) < len(text)
+    assert label.minimumSizeHint().width() == 0                # never widens its row
+    label.setText('Short')
+    assert label.shown_text() == 'Short' == label.text()
+    label.setFixedWidth(2000)                                  # given room, the full text comes back
+    label.setText(text)
+    assert label.shown_text() == text
+
+
+def test_problem_line_is_an_amber_triangle_and_text(qapp):
+    line = ProblemLine('channels 30–65 overlap Laser L (1–36)')
+    assert line.text() == 'channels 30–65 overlap Laser L (1–36)'
+    assert line.label.property('role') == 'problem'
+    assert line.icon.pixmap() is not None and not line.icon.pixmap().isNull()
+    line.setText('x')
+    assert line.text() == 'x'

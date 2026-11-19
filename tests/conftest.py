@@ -41,6 +41,25 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
+@pytest.fixture
+def styled_app(qapp):
+    """The app with PyLZR's real look (fonts, palette, stylesheet), put back
+    afterwards so other tests keep running unstyled."""
+    import pyqtgraph as pg
+
+    from pylzr.gui import style
+    saved = (qapp.style().objectName(), qapp.palette(), qapp.font(), qapp.styleSheet(),
+             pg.getConfigOption('background'), pg.getConfigOption('foreground'))
+    style.apply(qapp)
+    yield qapp
+    name, palette, font, sheet, background, foreground = saved
+    qapp.setStyleSheet(sheet)
+    qapp.setStyle(name)
+    qapp.setPalette(palette)
+    qapp.setFont(font)
+    pg.setConfigOptions(background=background, foreground=foreground)
+
+
 @pytest.fixture(autouse=True)
 def _fresh_state(tmp_path):
     """Every test starts on a simulated macOS with default devices and no
@@ -50,6 +69,11 @@ def _fresh_state(tmp_path):
     fake_pyaudio.reset()
     fake_udp.reset()
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / 'config'))
+    yield
+    # Widgets a test let go of with deleteLater() are deleted now: no event
+    # loop runs between tests, and left alive they pile up and slow every
+    # later stylesheet change
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 @pytest.fixture(autouse=True)
@@ -81,8 +105,8 @@ def make_window(qapp):
 
     created = []
 
-    def factory() -> WindowHarness:
-        harness = WindowHarness(MainWindow())
+    def factory(**kwargs) -> WindowHarness:
+        harness = WindowHarness(MainWindow(**kwargs))
         created.append(harness)
         return harness
 

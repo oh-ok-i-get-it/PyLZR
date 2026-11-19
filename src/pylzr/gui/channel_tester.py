@@ -1,0 +1,193 @@
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QSlider, QSpinBox,
+    QPushButton, QAbstractSpinBox,
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+
+from ..core import DMX_CHANNELS
+from . import theme
+from .widgets import set_role
+
+MAX_SHOWN     = 32   # sliders shown at once
+DEFAULT_SHOWN = 16
+
+# The faders, number boxes, button, header labels and warning use the app-wide
+# look and style roles (gui/style.py); only the channel numbers are styled here
+_TAB_STYLE = (
+    f'QLabel#Channel {{ color: {theme.TEXT_DIM}; font-family: "{theme.MONO_FONT}";'
+    f' font-size: {theme.SIZE_LABEL}px; font-weight: bold; }}'
+)
+
+
+def _number_box(low: int, high: int, value: int, width: int) -> QSpinBox:
+    box = QSpinBox()
+    box.setRange(low, high)
+    box.setValue(value)
+    box.setButtonSymbols(QAbstractSpinBox.NoButtons)
+    box.setAlignment(Qt.AlignCenter)
+    box.setFixedWidth(width)
+    set_role(box, 'input')
+    return box
+
+
+def _header_label(text: str) -> QLabel:
+    lbl = QLabel(text)
+    set_role(lbl, 'label', tone='light')
+    return lbl
+
+
+class ChannelTester(QWidget):
+    """The tester's Channels tab: one slider per DMX channel, for finding
+    out what a fixture's channels do.
+
+    Knows nothing about DMX output: it only reports what the sliders show.
+    Like every tester tab (see DMXTesterWindow), it has:
+
+        channels_changed(int, list) — first channel (1–512) and the values
+                                      (0–255) of every shown channel; emitted
+                                      on any change
+        resend()                    — emit channels_changed for what's shown
+        reset()                     — every slider back to 0, without emitting
+
+    Changing the start channel puts every slider back to 0, so values never
+    jump onto channels you haven't looked at. Changing how many channels
+    are shown keeps the values of the ones still shown.
+    """
+
+    channels_changed = pyqtSignal(int, list)
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setStyleSheet(_TAB_STYLE)
+
+        self._sliders: list[QSlider] = []
+        self._value_boxes: list[QSpinBox] = []
+        self._channel_labels: list[QLabel] = []
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(8)
+        root.addLayout(self._build_header())
+
+        warning = QLabel('Values go out live. Keep the laser aimed safely before moving a slider.')
+        warning.setObjectName('Warning')
+        set_role(warning, 'warning')
+        root.addWidget(warning)
+
+        self._strip = QGridLayout()
+        self._strip.setHorizontalSpacing(4)
+        self._strip.setVerticalSpacing(4)
+        root.addLayout(self._strip, stretch=1)
+
+        self._rebuild_strip(DEFAULT_SHOWN)
+
+    # ── Layout ────────────────────────────────────────────────────────────
+
+    def _build_header(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(6)
+
+        self._start_box = _number_box(1, DMX_CHANNELS - DEFAULT_SHOWN + 1, 1, 44)
+        self._start_box.setToolTip('First channel shown (1–512). Changing it puts every slider back to 0.')
+        self._start_box.valueChanged.connect(self._on_start_changed)
+
+        self._count_box = _number_box(1, MAX_SHOWN, DEFAULT_SHOWN, 36)
+        self._count_box.setToolTip(f'How many channels to show (1–{MAX_SHOWN})')
+        self._count_box.valueChanged.connect(self._on_count_changed)
+
+        self._zero_btn = QPushButton('All 0')
+        self._zero_btn.setToolTip('Every shown channel to 0')
+        set_role(self._zero_btn, 'small-button')
+        self._zero_btn.clicked.connect(self.zero_all)
+
+        row.addWidget(_header_label('Start channel'))
+        row.addWidget(self._start_box)
+        row.addSpacing(8)
+        row.addWidget(_header_label('Channels'))
+        row.addWidget(self._count_box)
+        row.addStretch(1)
+        row.addWidget(self._zero_btn)
+        return row
+
+    def _rebuild_strip(self, count: int):
+        """Show `count` channel columns, keeping the values of the first ones."""
+        kept = self.values[:count]
+        for widget in (*self._channel_labels, *self._sliders, *self._value_boxes):
+            self._strip.removeWidget(widget)
+            widget.deleteLater()
+        self._channel_labels, self._sliders, self._value_boxes = [], [], []
+
+        for col in range(count):
+            value = kept[col] if col < len(kept) else 0
+
+            label = QLabel()
+            label.setObjectName('Channel')
+            label.setAlignment(Qt.AlignCenter)
+
+            slider = QSlider(Qt.Vertical)
+            slider.setRange(0, 255)
+            slider.setPageStep(16)
+            slider.setValue(value)
+            slider.setMinimumHeight(140)
+
+            box = _number_box(0, 255, value, 36)
+
+            slider.valueChanged.connect(lambda v, b=box: self._on_slider(b, v))
+            box.valueChanged.connect(slider.setValue)    # slider then updates and emits
+
+            self._strip.addWidget(label,  0, col, Qt.AlignHCenter)
+            self._strip.addWidget(slider, 1, col, Qt.AlignHCenter)
+            self._strip.addWidget(box,    2, col, Qt.AlignHCenter)
+            self._channel_labels.append(label)
+            self._sliders.append(slider)
+            self._value_boxes.append(box)
+        self._renumber()
+
+    def _renumber(self):
+        for i, label in enumerate(self._channel_labels):
+            label.setText(str(self.start + i))
+
+    # ── State ─────────────────────────────────────────────────────────────
+
+    @property
+    def start(self) -> int:
+        return self._start_box.value()
+
+    @property
+    def count(self) -> int:
+        return len(self._sliders)
+
+    @property
+    def values(self) -> list[int]:
+        return [slider.value() for slider in self._sliders]
+
+    def zero_all(self):
+        self.reset()
+        self.resend()
+
+    def reset(self):
+        for slider, box in zip(self._sliders, self._value_boxes, strict=True):
+            for widget in (slider, box):
+                widget.blockSignals(True)
+                widget.setValue(0)
+                widget.blockSignals(False)
+
+    def resend(self):
+        self.channels_changed.emit(self.start, self.values)
+
+    # ── Handlers ──────────────────────────────────────────────────────────
+
+    def _on_slider(self, box: QSpinBox, value: int):
+        box.setValue(value)             # its echo back to the slider is a no-op (same value)
+        self.resend()
+
+    def _on_start_changed(self, start: int):
+        self._count_box.setMaximum(min(MAX_SHOWN, DMX_CHANNELS - start + 1))
+        self.reset()
+        self._renumber()
+        self.resend()
+
+    def _on_count_changed(self, count: int):
+        self._start_box.setMaximum(DMX_CHANNELS - count + 1)
+        self._rebuild_strip(count)
+        self.resend()

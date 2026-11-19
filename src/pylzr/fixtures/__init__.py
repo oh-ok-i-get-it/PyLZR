@@ -25,7 +25,7 @@ from .mappings import AttributeMapping, Bipolar, Direction, Linear, Options, Sel
 from .ofl import Capability, Channel, Entity, Mode, Profile, load_profile, parse_entity, read_profile
 from .patch import Patch, PatchEntry, PatchProblem, Rig, load_patch, read_patch, write_patch
 from .patterns import PatternEntry, PatternLibrary, PatternMapping
-from .renderer import Render, Renderer, compile_fixture
+from .renderer import PatternChannel, RawPatterns, Render, Renderer, Segment, compile_fixture
 from .specs import (
     SPEC_TYPES, BipolarSpec, DirectionSpec, LinearSpec, MappingSpec, OptionsSpec, SelectedSpec, read_spec,
 )
@@ -39,7 +39,7 @@ __all__ = [
     'AttributeMapping', 'Bipolar', 'Direction', 'Linear', 'Options', 'Selected',
     'Patch', 'PatchEntry', 'PatchProblem', 'Rig', 'load_patch', 'read_patch', 'write_patch',
     'PatternEntry', 'PatternLibrary', 'PatternMapping',
-    'Render', 'Renderer', 'compile_fixture',
+    'PatternChannel', 'RawPatterns', 'Render', 'Renderer', 'Segment', 'compile_fixture',
     'SPEC_TYPES', 'BipolarSpec', 'DirectionSpec', 'LinearSpec', 'MappingSpec', 'OptionsSpec', 'SelectedSpec',
     'read_spec',
     'Capability', 'Channel', 'Entity', 'Mode', 'Profile', 'load_profile', 'parse_entity', 'read_profile',

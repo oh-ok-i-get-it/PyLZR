@@ -1,7 +1,7 @@
 import pytest
 from PyQt5.QtCore import Qt
 
-from pylzr.midi import KeyboardMapper
+from pylzr.midi import BLACKOUT_NOTE, KeyboardMapper
 
 # Every mapped key in order; notes run sequentially from 60.
 MAPPED_KEYS = [
@@ -54,3 +54,10 @@ def test_unmapped_keys_ignored(key):
     mapper, out = make_mapper()
     mapper.handle_key(int(key))
     assert out.notes == []
+
+
+def test_blackout_note_is_space():
+    assert BLACKOUT_NOTE == 106
+    mapper, out = make_mapper()
+    mapper.handle_key(int(Qt.Key_Space))
+    assert out.notes == [BLACKOUT_NOTE]

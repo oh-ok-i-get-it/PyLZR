@@ -159,3 +159,120 @@ def test_base_values_beat_profile_defaults_and_empty_slots_send_zero():
     assert r.defaults == bytes([7, 0, 0]) and r.layers == ('a',)
     assert r.render({'size': 1.0}).values == bytes([7, 255, 0])
     assert r.render({'size@b': 1.0}).unsupported == (AttrKey('size', 'b'),)
+
+
+# ── Raw patterns (testers only) ──────────────────────────────────────────
+
+GROUP_SELECTION = ('Pattern Group', 'Pattern Selection')      # the Gruolin's pattern channels: 3–4, b 20–21
+
+
+def tagged_gruolin():
+    base = renderer().resolved
+    library = base.binding.patterns.with_entry(
+        PatternEntry('tunnel 3', {'Pattern Group': 64, 'Pattern Selection': 15}, 'tunnel'))
+    return compile_fixture(base.binding.with_patterns(library), base.profile)
+
+
+def test_raw_patterns_set_each_layers_pattern_channels():
+    result = renderer().render({'size': 0.5}, {'a': {'Pattern Group': 16, 'Pattern Selection': 25},
+                                               'b': {'Pattern Group': 64, 'Pattern Selection': 3}})
+    expected = bytearray(renderer().render({'size': 0.5}).values)
+    expected[2:4], expected[19:21] = bytes([16, 25]), bytes([64, 3])            # only the pattern channels differ
+    assert result.values == bytes(expected)
+    assert dict(result.patterns) == {'a': None, 'b': None} and result.ignored == ()
+
+
+def test_missing_raw_channels_take_no_pattern_then_the_default():
+    values = renderer().render({}, {'a': {'Pattern Group': 32}}).values
+    assert values[2:4] == bytes([32, 0])                       # Pattern Selection: the library's "none"
+    values = renderer().render({}, {'b': {'Pattern Selection': 7}}).values
+    assert values[19:21] == bytes([0, 7])                      # Pattern Group: its default
+
+
+def test_raw_values_beat_a_request_which_is_reported_ignored():
+    r = tagged_gruolin()
+    result = r.render({'pattern': PatternRequest.of('tunnel'), 'pattern@b': PatternRequest.of('tunnel')},
+                      {'a': {'Pattern Group': 16, 'Pattern Selection': 25}})
+    assert result.values[2:4] == bytes([16, 25]) and result.values[19:21] == bytes([64, 15])
+    assert result.ignored == (AttrKey('pattern'),)
+    assert result.patterns['a'] is None and result.patterns['b'].name == 'tunnel 3'
+
+
+def test_a_raw_pick_that_is_tagged_shows_its_tag():
+    result = tagged_gruolin().render({}, {'b': {'Pattern Group': 64, 'Pattern Selection': 15}})
+    assert result.patterns['b'].name == 'tunnel 3' and result.patterns['a'] is None
+
+
+def sample_with_patterns():
+    return Renderer(load_binding({'version': 1, 'name': 'Two', 'profile': KEY, 'mode': '15ch',
+                                  'layers': {'a': 0, 'b': 7},
+                                  'mappings': [{'type': 'linear', 'attribute': 'size', 'channel': 'Size'}],
+                                  'patterns': {'channels': ['Pattern'], 'none': {'Pattern': 0}, 'library': []}},
+                                 'test/two').resolve(profile()))
+
+
+@pytest.mark.parametrize('raw, message', [
+    ({'c': {'Pattern Group': 1}}, 'no layer "c"'),
+    ({'a': {'Pattern Size': 1}}, '"Pattern Size" is not a pattern channel'),
+    ({'a': {'Pattern Group': True}}, 'needs a DMX value'),
+    ({'a': {'Pattern Group': 300}}, "isn't described by the profile"),
+])
+def test_bad_raw_patterns_are_refused(raw, message):
+    with pytest.raises(ValueError, match=message):
+        renderer().render({}, raw)
+
+
+def test_raw_patterns_never_send_maintenance():
+    r = sample_with_patterns()
+    assert r.render({}, {'a': {'Pattern': 150}}).values[7] == 150            # a pattern on layer a …
+    with pytest.raises(ValueError, match='Maintenance'):
+        r.render({}, {'b': {'Pattern': 150}})                                # … Maintenance on layer b
+    with pytest.raises(ValueError, match='Maintenance'):
+        r.render({}, {'a': {'Pattern': 230}})
+
+
+def test_a_fixture_without_patterns_takes_no_raw_patterns():
+    r = Renderer(load_binding({'version': 1, 'name': 'Tiny', 'profile': KEY, 'mode': '3ch',
+                               'mappings': [{'type': 'linear', 'attribute': 'size', 'channel': 'Size'}]}
+                              ).resolve(profile()))
+    assert r.pattern_channels() == () and r.library is None
+    assert r.render({'size': 1.0}, {}).values == bytes([0, 255, 0])
+    with pytest.raises(ValueError, match='no pattern channels'):
+        r.render({}, {'a': {'Pattern': 1}})
+
+
+def test_pattern_channels_list_what_a_raw_pattern_may_use():
+    group, selection = renderer().pattern_channels()
+    assert (group.name, selection.name) == GROUP_SELECTION
+    assert [(s.start, s.end) for s in group.segments][:5] == [(0, 15), (16, 31), (32, 47), (48, 63), (64, 127)]
+    assert group.segments[1].label == 'Line patterns, folder 2' and len(group.segments) == 9
+    assert [(s.start, s.end, s.label) for s in selection.segments] == [(0, 0, 'No pattern'), (1, 255, 'Pattern')]
+    group_b, selection_b = renderer().pattern_channels('b')
+    assert group_b.segments[:5] == group.segments[:5]                       # each layer's own segments:
+    assert [(s.start, s.end, s.label) for s in group_b.segments[5:]] == [(128, 255, 'Generic')]  # no dynamic effects
+    assert selection_b.segments[0].label == 'No second pattern'
+    a, b = sample_with_patterns().pattern_channels('a'), sample_with_patterns().pattern_channels('b')
+    assert [(s.start, s.end) for s in a[0].segments] == [(0, 0), (1, 199)]  # Maintenance left out
+    assert [(s.start, s.end) for s in b[0].segments] == [(0, 0), (1, 99)]   # layer b has fewer patterns
+    assert b[0].allows(99) and not b[0].allows(100)
+
+
+def test_a_different_laser_one_layer_and_mode_based_patterns():
+    import el400
+    r = el400.renderer()
+    assert r.layers == ('a',) and not r.supports('power') and r.supports('x_dynamic_speed')
+    mode, selection = r.pattern_channels()
+    assert [s.label for s in mode.segments] == ['Laser off', 'Sound mode', 'Automatic mode', 'Static pattern',
+                                                'Dynamic pattern']
+    result = r.render({'color': 'red'}, {'a': {'Mode': 160, 'Pattern Selection': 20}})
+    assert result.values[:2] == bytes([160, 20]) and result.values[7] == 12
+    assert r.render({}).values[0] == 0                                       # no pattern: laser off
+
+
+def test_a_missing_raw_channel_takes_the_librarys_no_pattern_value_over_the_default():
+    r = Renderer(load_binding({'version': 1, 'name': 'Odd', 'profile': KEY, 'mode': '15ch', 'layers': {'a': 0, 'b': 7},
+                               'mappings': [{'type': 'linear', 'attribute': 'size', 'channel': 'Size'}],
+                               'patterns': {'channels': ['Pattern'], 'none': {'Pattern': 5}, 'library': []}},
+                              'test/odd').resolve(profile()))
+    assert r.defaults[7] == 0                                                # the channel's default …
+    assert r.render({}, {'a': {}}).values[7] == 5                            # … loses to "no pattern"

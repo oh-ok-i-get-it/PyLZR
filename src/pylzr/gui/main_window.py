@@ -1,15 +1,19 @@
 import logging
+import threading
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtCore import Qt, QPoint, QUrl
+from PyQt5.QtGui import QDesktopServices
 
 from ..core import CONTROL_MODES, WINDOW_W, WINDOW_H
 from ..core.app_logger import LOGGER_NAME, Tone, get_logger
 from ..core.output_switch import OutputSwitch
+from ..core.safety import EmergencyStop
 from ..engine   import AudioEngine
-from ..midi     import MIDIOutput, KeyboardMapper
+from ..midi     import BLACKOUT_NOTE, MIDIOutput, KeyboardMapper
 from ..dmx      import DMXOutput, NodeDiscovery, PortAddress, node_choices
+from ..fixtures import FixtureLibrary, Patch
 from .                import style, theme
 from .spectrum_widget import SpectrumWidget
 from .control_panel   import ControlPanel
@@ -29,12 +33,22 @@ class MainWindow(QWidget):
     output chosen by Control Mode: MIDI, or DMX (Art-Net). The DMX output
     only sends while DMX is chosen.
 
+    The fixture library (your patch, profiles and bindings, from the
+    fixtures folder next to the settings file) is shown in Settings → DMX,
+    re-read each time Settings opens, and the patch is saved on every edit.
+
+    On an unhandled exception the emergency stop (`safety`, made by main())
+    blacks out DMX and, in MIDI mode, sends all notes off and, once per MIDI
+    enable, SoundSwitch's blackout note; the window keeps running with DMX
+    stopped (docs/design/safety-phase.md).
+
     This class only connects things — the pipeline lives in engine.py and
-    the audio/, analysis/, midi/ and dmx/ packages. User settings are
-    restored from the SettingsStore at startup and saved whenever they change.
+    the audio/, analysis/, midi/, dmx/ and fixtures/ packages. User settings
+    are restored from the SettingsStore at startup, saved shortly after they
+    change (the store waits for changes to pause) and written on close.
     """
 
-    def __init__(self):
+    def __init__(self, safety: EmergencyStop | None = None):
         super().__init__()
         self.setWindowTitle('PyLZR')
         style.dark_title_bar(self)                 # Windows only; no-op elsewhere
@@ -45,6 +59,13 @@ class MainWindow(QWidget):
         logging.getLogger(LOGGER_NAME).addHandler(self.log_panel.log_handler)
 
         self.store = SettingsStore()
+        self.library = FixtureLibrary(self.store.fixtures_folder)
+        self._logged_fixture_problems: set[str] = set()     # each file problem is logged once per run
+
+        # SoundSwitch's blackout note: due on the next emergency stop in MIDI mode (Q10, Q12). Before the MIDI port
+        # opens, since opening one re-arms it
+        self._space_lock  = threading.Lock()     # guards _space_armed; the stop may run on any thread
+        self._space_armed = True
 
         # Subsystems (saved devices are opened directly, falling back to defaults)
         self.midi_out = MIDIOutput()
@@ -54,6 +75,13 @@ class MainWindow(QWidget):
                                   PortAddress(*self.store.get('dmx/port_address')), parent=self,
                                   discovery=self.discovery)
         self.output   = OutputSwitch({'MIDI': self.midi_out, 'DMX': self.dmx_out}, CONTROL_MODES[0])
+
+        # Emergency stop: on an unhandled exception, DMX goes dark first, then SoundSwitch gets all notes off and,
+        # once per MIDI enable or port, its blackout note (design Q2, Q10, Q12)
+        self.safety = safety if safety is not None else EmergencyStop()
+        self.safety.register('dmx', self.dmx_out.panic)
+        self.safety.register('midi', self._midi_emergency_stop)
+
         self.engine   = AudioEngine(self.output, parent=self,
                                     device_name=self.store.get('audio/device') or None)
         self.key_map  = KeyboardMapper(self.output, is_blocked=lambda: self.engine.sound_mode.enabled)
@@ -85,6 +113,7 @@ class MainWindow(QWidget):
         self._show_audio_device(ok=True)
         self._refresh_midi_ports()
         self.settings_panel.set_dmx_status()
+        self._show_fixtures()
 
         # Engine → displays
         engine = self.engine
@@ -117,6 +146,8 @@ class MainWindow(QWidget):
         self.settings_panel.dmx.node_changed.connect(self._on_dmx_node_changed)
         self.settings_panel.dmx.tester_requested.connect(self._open_dmx_tester)
         self.settings_panel.dmx.find_requested.connect(self._find_dmx_nodes)
+        self.settings_panel.dmx.fixtures.patch_edited.connect(self._on_patch_edited)
+        self.settings_panel.dmx.fixtures.open_folder_requested.connect(self._open_fixtures_folder)
 
         # Restore saved settings through the panels (same path as user input),
         # then save every later change
@@ -132,7 +163,7 @@ class MainWindow(QWidget):
     def _open_saved_midi_port(self):
         saved = self.store.get('midi/port')
         if saved and saved in self.midi_out.list_ports():
-            self.midi_out.open(saved)
+            self._open_midi_port(saved)
 
     def _apply_settings(self, get):
         """Set every saved control from get(key) (stored or default values)."""
@@ -164,7 +195,7 @@ class MainWindow(QWidget):
             self._show_audio_device(ok=True)
         default_port = self.midi_out.default_port()
         if self.midi_out.port_label != default_port:
-            self.midi_out.open(default_port)
+            self._open_midi_port(default_port)
         self._refresh_midi_ports()
         self.store.clear()
         log.info('Settings reset to defaults', extra={'tone': Tone.MUTED})
@@ -194,6 +225,8 @@ class MainWindow(QWidget):
         visible = not self.settings_panel.isVisible()
         if visible:
             self._refresh_midi_ports()
+            self.library.reload()                  # picks up files changed by hand
+            self._show_fixtures()
             self._position_settings_panel()
             self.settings_panel.raise_()
         self.settings_panel.setVisible(visible)
@@ -231,12 +264,12 @@ class MainWindow(QWidget):
     def _refresh_midi_ports(self):
         # Retry the default port while disconnected, e.g. loopMIDI started after PyLZR
         if not self.midi_out.connected:
-            self.midi_out.open(self.midi_out.default_port())
+            self._open_midi_port(self.midi_out.default_port())
         self.settings_panel.set_midi_ports(self.midi_out.list_ports(), self.midi_out.port_label)
         self.settings_panel.set_midi_status(self.midi_out.connected, self.midi_out.port_name)
 
     def _on_midi_port_changed(self, label: str):
-        if self.midi_out.open(label):
+        if self._open_midi_port(label):
             self.store.set('midi/port', label)
         self._refresh_midi_ports()
 
@@ -247,6 +280,8 @@ class MainWindow(QWidget):
     def _on_control_mode_changed(self, mode: str):
         """Route cues to `mode`'s output. DMX sends only while chosen; leaving
         it blacks the fixtures out and closes the channel tester."""
+        if mode == 'MIDI':
+            self._rearm_space()                   # before select(): a stop in between still sees DMX, keeps the arm
         self.output.select(mode)
         dmx = mode == 'DMX'
         if dmx:
@@ -282,12 +317,51 @@ class MainWindow(QWidget):
         if self.settings_panel.isVisible():        # closed meanwhile: the log has the results
             self.settings_panel.dmx.show_nodes(choices)
 
+    # ------------------------------------------------------------------
+    # Fixtures
+    # ------------------------------------------------------------------
+
+    def _show_fixtures(self):
+        """Show the library's types, patch and problems in Settings → DMX, and
+        log file problems not logged before."""
+        library, fixtures = self.library, self.settings_panel.dmx.fixtures
+        fixtures.set_types([(key, name, library.renderers[key].footprint) for key, name in library.types()])
+        fixtures.set_patch(library.patch, library.rig().problems)
+        problems = [str(problem) for problem in library.problems]
+        fixtures.set_file_problems(problems)
+        if self._dmx_tester is not None:
+            self._dmx_tester.attributes.set_rig(library.rig(), library.vocabulary)
+        for problem in problems:
+            if problem not in self._logged_fixture_problems:
+                self._logged_fixture_problems.add(problem)
+                log.warning(f'Fixtures: {problem}')
+
+    def _on_patch_edited(self, patch: Patch):
+        try:
+            self.library.save_patch(patch)
+        except OSError as e:
+            log.error(f"Fixtures: couldn't save {self.library.folder / 'patch.json'} ({e.strerror or e})")
+        self._show_fixtures()
+
+    def _open_fixtures_folder(self):
+        folder = self.library.folder
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.error(f"Fixtures: couldn't create {folder} ({e.strerror or e})")
+            return
+        if QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            log.info(f'Fixtures folder: {folder}', extra={'tone': Tone.MUTED})
+        else:
+            log.warning(f"Fixtures: couldn't open {folder}. Open it yourself to add profiles and bindings.")
+
     def _open_dmx_tester(self):
         if self._dmx_tester is None:
             tester = DMXTesterWindow(self)
             tester.channels_changed.connect(self.dmx_out.set_test_values)
             tester.closed.connect(self.dmx_out.clear_test_values)
             self._dmx_tester = tester
+            tester.attributes.set_rig(self.library.rig(), self.library.vocabulary)
         self._dmx_tester.show()
         self._dmx_tester.raise_()
         self._dmx_tester.activateWindow()
@@ -295,6 +369,37 @@ class MainWindow(QWidget):
     def _close_dmx_tester(self):
         if self._dmx_tester is not None and self._dmx_tester.isVisible():
             self._dmx_tester.close()
+
+    # ------------------------------------------------------------------
+    # Emergency stop
+    # ------------------------------------------------------------------
+
+    def _midi_emergency_stop(self):
+        """In MIDI mode: all notes off, and, the first time since MIDI was
+        (re)enabled, SPACE too (SoundSwitch's blackout look). Never twice,
+        since SoundSwitch might toggle on it (design Q10). Any thread; reads
+        only Python state; never raises."""
+        if self.output.active != 'MIDI':
+            return
+        with self._space_lock:
+            space, self._space_armed = self._space_armed, False
+        sent = self.midi_out.panic(BLACKOUT_NOTE if space else None)
+        if space and not sent:                   # SPACE never reached the port: still due (ASSUMPTION Q11)
+            self._rearm_space()
+
+    def _rearm_space(self):
+        """The next emergency stop in MIDI mode sends SPACE again: MIDI was
+        (re)enabled (Q10) or a MIDI port was opened (Q12)."""
+        with self._space_lock:
+            self._space_armed = True
+
+    def _open_midi_port(self, label: str | None) -> bool:
+        """midi_out.open(label); a port that opens re-arms SPACE (Q12):
+        SoundSwitch on it hasn't had SPACE through this connection."""
+        if not self.midi_out.open(label):
+            return False
+        self._rearm_space()
+        return True
 
     # ------------------------------------------------------------------
     # Qt event overrides
@@ -316,10 +421,17 @@ class MainWindow(QWidget):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        # The blackout goes out first, then the settings are written, both
+        # before anything that could block (closing audio, waiting for the FFT
+        # thread); the socket is released last. See docs/design/safety-phase.md.
+        self.dmx_out.stop()
         self._close_dmx_tester()
+        self.store.flush()                      # settings to disk before anything that can block (audio close, FFT wait)
         self.engine.shutdown()
-        self.dmx_out.close()        # blacks out the fixtures if DMX was sending
         self.discovery.close()
         self.midi_out.close()
+        self.dmx_out.close()
+        self.safety.unregister('dmx')            # last, so an exception above still reaches the stops
+        self.safety.unregister('midi')
         logging.getLogger(LOGGER_NAME).removeHandler(self.log_panel.log_handler)
         super().closeEvent(event)

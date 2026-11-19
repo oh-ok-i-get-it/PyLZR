@@ -1,19 +1,24 @@
 import errno
 import logging
+import threading
+import time
 
 import pytest
+from PyQt5 import sip
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from fakes import udp as fake_udp
 from fakes.udp import FakeSocket
 from helpers import artpollreply, dmx_packets as packets, wait_until
 from pylzr.core import DMX_REFRESH_HZ
-from pylzr.dmx import DMXOutput, PortAddress, parse_artpollreply
-from pylzr.dmx.dmx_output import ANSWER_TICKS, PING_TICKS, status_for
+from pylzr.dmx import DMXOutput, PortAddress, dmx_output, parse_artpollreply
+from pylzr.dmx.dmx_output import ANSWER_TICKS, BLACKOUT_REPEATS, PING_TICKS, status_for
 
 pytestmark = pytest.mark.usefixtures('qapp')     # QTimer needs a Qt application
 
 NODE = ('10.201.6.100', 6454)
+DARK = [bytes(512)] * 3
+SHOW = bytes([255]) + bytes(511)
 
 
 def frames() -> list[bytes]:
@@ -67,15 +72,19 @@ def test_universe_address_in_every_packet():
     assert {(p['net'], p['sub_uni']) for p in packets()} == {(1, 0x23)}
 
 
-def test_stop_sends_one_blackout_then_nothing(out, statuses):
+def test_blackout_is_sent_three_times():
+    assert BLACKOUT_REPEATS == 3
+
+
+def test_stop_sends_the_blackout_three_times_then_nothing(out, statuses):
     out.universe.set(1, 255)
     out.set_test_values(5, [255])
     out.start()
     out.stop()
     out.stop()
     assert not out.active
-    assert frames()[-1] == bytes(512)            # dark, even over test values
-    assert len(packets()) == 2
+    assert frames()[-3:] == DARK                 # dark, even over test values
+    assert len(packets()) == 1 + 3
     assert statuses[-1] == ('off', 'Off')
     assert out.universe.get(1) == 255            # the show itself is kept
 
@@ -91,7 +100,7 @@ def test_close_blacks_out_once_and_releases_the_socket(out):
     out.start()
     out.close()
     out.close()
-    assert frames()[-1] == bytes(512) and len(packets()) == 2
+    assert frames()[-3:] == DARK and len(packets()) == 1 + 3
     assert fake_udp.sockets[0].closed == 1
     with pytest.raises(RuntimeError):
         out.start()
@@ -128,11 +137,25 @@ def test_configure_while_sending_blacks_out_the_old_node(out):
     out.start()
     assert out.configure('10.201.6.101', PortAddress(0, 0, 1))
     old, new = [p for p in packets() if p['to'] == NODE], [p for p in packets() if p['to'] != NODE]
-    assert old[-1]['data'] == bytes(512)         # the old node goes dark
+    assert [p['data'] for p in old[1:]] == DARK  # the old node goes dark, three times
     assert new[0]['to'] == ('10.201.6.101', 6454) and new[0]['sub_uni'] == 1
     assert new[0]['data'][0] == 200              # the new one gets the show at once
     assert fake_udp.sockets[0].closed == 1       # old socket released
     assert out.node_ip == '10.201.6.101'
+
+
+def test_each_blackout_copy_has_its_own_sequence_number(out):
+    """A node that drops repeated sequence numbers still takes all three."""
+    out.start()
+    out.stop()
+    assert [p['sequence'] for p in packets()] == [1, 2, 3, 4]
+
+
+def test_one_lost_blackout_send_still_leaves_two(out):
+    out.start()
+    fake_udp.fail_next.append(OSError(errno.ENETUNREACH, 'x'))
+    out.stop()
+    assert frames()[1:] == [bytes(512)] * 2
 
 
 def test_configure_while_stopped_sends_nothing(out):
@@ -152,6 +175,217 @@ def test_invalid_node_ip_is_rejected_and_nothing_changes(out, bad):
 def test_invalid_ip_at_construction_raises():
     with pytest.raises(ValueError):
         DMXOutput('not an ip', socket_factory=FakeSocket)
+
+
+# ── Emergency stop ───────────────────────────────────────────────────────
+# `monkeypatch` is undone after the `out` fixture's close(), whatever the
+# argument order: the autouse `_no_real_network` fixture sets it up first. A
+# patch close() must not see goes in a `monkeypatch.context()` block.
+
+def spin_until(condition, timeout: float = 2.0):
+    """Wait for condition() without processing Qt events: the caller may hold
+    the send lock, and wait_until() could run a queued stop() that needs it."""
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, 'timed out waiting for condition'
+        time.sleep(0.001)
+
+
+def test_panic_blacks_out_at_once_and_stops_on_the_next_event_pass(out, qapp):
+    out.universe.set(1, 255)
+    out.start()
+    out.panic()
+    assert len(packets()) == 1 + 3
+    assert frames()[1:] == DARK
+    assert out.active                             # stop() is queued, not run inside panic()
+    qapp.processEvents()
+    assert not out.active
+    assert len(packets()) == 1 + 6
+    assert frames()[-3:] == DARK
+    assert out.state == 'off'
+    assert out.universe.get(1) == 255             # the show is kept
+
+
+def test_after_panic_only_dark_frames_go_out_until_start(out, qapp):
+    out.universe.set(1, 255)
+    out.start()
+    out.panic()
+    out._tick()
+    out._tick()
+    assert len(packets()) == 1 + 3                # the ticks sent nothing
+    assert out.configure('10.201.6.101', PortAddress())
+    assert all(f == bytes(512) for f in frames()[1:])
+    assert {p['to'] for p in packets()[1:]} == {NODE}    # only the old node's blackout; the new node got nothing
+    qapp.processEvents()
+    assert not out.active
+    out.start()
+    assert frames()[-1] == SHOW
+
+
+def test_frames_sent_during_a_panic_on_another_thread_are_dark(out, monkeypatch):
+    out.universe.set(1, 255)
+    out.start()
+    real_sendto = FakeSocket.sendto
+    main = threading.current_thread()
+    panicking = threading.Event()
+
+    def slow_off_main(self, data, address):
+        if threading.current_thread() is not main:
+            panicking.set()
+            time.sleep(0.02)                      # panic() now holds the send lock for ~60 ms
+        return real_sendto(self, data, address)
+
+    monkeypatch.setattr(FakeSocket, 'sendto', slow_off_main)
+    worker = threading.Thread(target=out.panic)
+    worker.start()
+    ticks_during_panic = 0
+    while worker.is_alive():
+        if panicking.is_set():
+            ticks_during_panic += 1
+        out._tick()
+        time.sleep(0.005)
+    worker.join()
+    assert ticks_during_panic > 0                 # the race was exercised: ticks ran while panic() was sending
+    sent = frames()
+    first_dark = next(i for i, f in enumerate(sent) if f == bytes(512))
+    assert all(f == bytes(512) for f in sent[first_dark:])
+
+
+def test_a_frame_being_sent_when_panic_starts_goes_out_before_the_blackout(out, monkeypatch):
+    """The send lock, deterministically: a tick has passed the flag check when
+    panic() starts on another thread. panic() must wait for that send, so the
+    show frame goes out before the first dark frame, not after it."""
+    monkeypatch.setattr(dmx_output, '_PANIC_LOCK_TIMEOUT_S', 5.0)   # wait for the send in flight, however long
+    out.universe.set(1, 255)
+    out.start()
+    real_build = dmx_output.build_artdmx
+    main = threading.current_thread()
+    worker = threading.Thread(target=out.panic)
+
+    def build_while_panic_starts(data, port, sequence):
+        if threading.current_thread() is main and worker.ident is None:
+            worker.start()
+            spin_until(lambda: out._panicked)     # panic() has begun...
+            worker.join(0.1)                      # ...and, with the lock, can't send while this frame is in flight
+        return real_build(data, port, sequence)
+
+    monkeypatch.setattr(dmx_output, 'build_artdmx', build_while_panic_starts)
+    out._tick()
+    worker.join()
+    assert frames() == [SHOW, SHOW] + DARK
+
+
+def test_a_frame_still_in_flight_when_panic_stops_waiting_is_followed_by_dark(out, monkeypatch, caplog):
+    """The GUI thread holds the send lock past _PANIC_LOCK_TIMEOUT_S (5 ms):
+    panic() sends its dark frames without the lock, the show frame in flight
+    goes out after them, and panic() then blacks out again after it."""
+    monkeypatch.setattr(dmx_output, '_PANIC_RETRY_TIMEOUT_S', 5.0)  # however late the stuck send finishes
+    out.universe.set(1, 255)
+    out.start()
+    real_build = dmx_output.build_artdmx
+    main = threading.current_thread()
+    worker = threading.Thread(target=out.panic)
+
+    def build_until_panic_gives_up(data, port, sequence):
+        if threading.current_thread() is main and worker.ident is None:
+            worker.start()
+            spin_until(lambda: frames().count(bytes(512)) == BLACKOUT_REPEATS)   # sent without the lock
+        return real_build(data, port, sequence)
+
+    monkeypatch.setattr(dmx_output, 'build_artdmx', build_until_panic_gives_up)
+    out._tick()
+    worker.join()
+    assert frames() == [SHOW] + DARK + [SHOW] + DARK    # the late show frame is not the last thing sent
+    assert 'then again once that send had finished' in caplog.text
+
+
+def test_a_start_before_the_panics_own_stop_sends_nothing_lit(out, qapp):
+    """start() racing with a panic() on another thread (e.g. Control Mode
+    switched to DMX at that moment): no stop() has run since the panic, so
+    start() doesn't end it, and the panic's queued stop() then stops it."""
+    out.universe.set(1, 255)
+    out.panic()                                   # DMX off: nothing to black out; stop() is queued
+    out.start()
+    assert frames() == []                         # the show frame was held back
+    qapp.processEvents()                          # the panic's stop()
+    assert not out.active
+    assert all(f == bytes(512) for f in frames())
+    out.start()                                   # after that stop(): the show goes out again
+    assert frames()[-1] == SHOW
+
+
+def test_panic_right_after_the_first_frame_blacks_out(out, monkeypatch):
+    """start()'s first frame is out before the status says it's sending:
+    panic() decides from state set before that frame, not from the status."""
+    out.universe.set(1, 255)
+    real_update = out._update_status
+    state_at_panic = []
+
+    def panic_first(*args):
+        if not state_at_panic:
+            state_at_panic.append(out.state)
+            out.panic()
+        real_update(*args)
+
+    monkeypatch.setattr(out, '_update_status', panic_first)
+    out.start()
+    assert state_at_panic == ['off']              # the window this test is about
+    assert frames() == [SHOW] + DARK
+
+
+def test_panic_while_stopped_sends_nothing(out, qapp, caplog):
+    out.universe.set(1, 255)
+    with caplog.at_level(logging.DEBUG, logger='pylzr'):
+        out.panic()
+        qapp.processEvents()
+    assert fake_udp.sent == [] and not out.active
+    assert 'nothing to black out' in caplog.text
+    out.start()
+    assert frames() == [SHOW]                     # the panic's stop() has run, so start() sends the show again
+
+
+def test_panic_after_close_sends_nothing(out):
+    out.start()
+    out.close()
+    n = len(fake_udp.sent)
+    out.panic()
+    assert len(fake_udp.sent) == n
+
+
+def test_each_panic_copy_has_its_own_sequence_number(out):
+    out.start()
+    out.panic()
+    assert [p['sequence'] for p in packets()] == [1, 2, 3, 4]
+
+
+def test_panic_never_raises(out, monkeypatch, caplog):
+    out.start()
+
+    def raiser(data):
+        raise RuntimeError('sender closed')
+
+    with monkeypatch.context() as patched:        # undone before the fixture's close() (monkeypatch is set up first: autouse)
+        patched.setattr(out._sender, 'send', raiser)
+        out.panic()
+    errors = [r for r in caplog.records if r.levelname == 'ERROR' and 'frame not sent' in r.getMessage()]
+    assert len(errors) == 3
+
+
+def test_panic_from_another_thread(out):
+    out.start()
+    worker = threading.Thread(target=out.panic)
+    worker.start()
+    worker.join()
+    assert frames()[1:] == DARK
+    wait_until(lambda: not out.active)            # the queued stop reached the GUI thread
+
+
+def test_panic_after_the_qt_object_is_gone_still_blacks_out():
+    o = DMXOutput(socket_factory=FakeSocket)
+    o.start()
+    sip.delete(o)
+    o.panic()
+    assert frames()[-3:] == DARK
 
 
 # ── Status ───────────────────────────────────────────────────────────────

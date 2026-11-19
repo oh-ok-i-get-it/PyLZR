@@ -80,7 +80,7 @@ def test_leaving_dmx_blacks_out_then_stops(harness, qapp):
     w.dmx_out.universe.set(1, 255)
     w.dmx_out._tick()
     set_mode(harness, 'MIDI')
-    assert frames()[-1] == bytes(512)
+    assert frames()[-3:] == [bytes(512)] * 3
     sent = len(fake_udp.sent)
     qapp.processEvents()
     assert len(fake_udp.sent) == sent and not w.dmx_out.active
@@ -146,8 +146,8 @@ def test_tester_values_go_out_live_and_clear_on_close(harness):
     set_mode(harness, 'DMX')
     tester = open_tester(harness)
     assert tester.isVisible()
-    tester._start_box.setValue(5)
-    tester._sliders[0].setValue(200)
+    tester.channels._start_box.setValue(5)
+    tester.channels._sliders[0].setValue(200)
     w.dmx_out._tick()
     assert frames()[-1][4] == 200                        # channel 5
     tester.close()
@@ -163,7 +163,7 @@ def test_tester_is_one_window(harness):
 def test_leaving_dmx_closes_the_tester(harness):
     set_mode(harness, 'DMX')
     tester = open_tester(harness)
-    tester._sliders[0].setValue(255)
+    tester.channels._sliders[0].setValue(255)
     set_mode(harness, 'MIDI')
     assert not tester.isVisible()
     assert not harness.window.dmx_out.universe.has_overrides
@@ -176,8 +176,27 @@ def test_closing_the_app_blacks_out_and_releases_the_socket(harness):
     set_mode(harness, 'DMX')
     w.dmx_out.universe.set(1, 255)
     harness.close()
-    assert frames()[-1] == bytes(512)
+    assert frames()[-3:] == [bytes(512)] * 3
     assert fake_udp.sockets[0].closed == 1               # the sending socket
+
+
+def test_blackout_goes_out_before_the_audio_stream_is_closed(harness, monkeypatch):
+    """Closing audio or waiting for the FFT thread could block; the laser must
+    already be dark by then."""
+    from pylzr.audio.audio_input import AudioInput
+    w = harness.window
+    set_mode(harness, 'DMX')
+    w.dmx_out.universe.set(1, 255)
+    dark_frames_when_audio_closed = []
+    original_close = AudioInput.close
+
+    def close(self):
+        dark_frames_when_audio_closed.append(sum(f == bytes(512) for f in frames()))
+        original_close(self)
+    monkeypatch.setattr(AudioInput, 'close', close)
+    harness.close()
+    assert dark_frames_when_audio_closed and dark_frames_when_audio_closed[0] >= 1
+    assert frames()[-1] == bytes(512)
 
 
 def test_closing_the_app_closes_the_tester(harness):

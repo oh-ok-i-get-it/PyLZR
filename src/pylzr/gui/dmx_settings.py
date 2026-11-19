@@ -9,6 +9,7 @@ from PyQt5.QtGui import QRegularExpressionValidator
 from ..core import DMX_DEFAULT_NODE_IP
 from ..dmx import NodeChoice, is_ipv4
 from . import style, theme
+from .fixture_list import FixtureList
 from .panel_style import label, pad, section
 from .widgets import set_role
 
@@ -28,7 +29,8 @@ _NONE_FOUND     = 'No Art-Net nodes answered (see the log)'
 class DMXSettings(QWidget):
     """The DMX (ART-NET) section of the settings panel: the Art-Net node's
     IP address with a Find button, its universe (Net / Sub / Uni) and the
-    channel tester button.
+    channel tester button, then the FIXTURES list (`fixtures`, a
+    FixtureList with its own signals and setters).
 
     Signals:
         node_changed(str, list) — node IP, [net, subnet, universe]; only
@@ -109,6 +111,10 @@ class DMXSettings(QWidget):
         self.set_tester_enabled(False)
 
         v.addLayout(row)
+
+        v.addSpacing(6)
+        self.fixtures = FixtureList()
+        v.addWidget(self.fixtures)
         return pad(v, t=8, b=10)
 
     # ── Public setters ────────────────────────────────────────────────────

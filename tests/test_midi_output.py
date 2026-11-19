@@ -1,4 +1,5 @@
 import gc
+import threading
 
 import pytest
 import rtmidi as fake_rtmidi
@@ -103,3 +104,87 @@ def test_close_releases_port():
     gc.collect()
     assert not m.connected and fake_rtmidi.live_virtual == []
     m.close()   # safe to call twice
+
+
+# ── Emergency stop ───────────────────────────────────────────────────────────
+
+ALL_OFF = [0xB0, 123, 0]
+
+
+def connect_named() -> tuple[MIDIOutput, str]:
+    fake_rtmidi.ports.append('PyLZR-MIDI 1')
+    return connect(MIDIOutput()), 'PyLZR-MIDI 1'
+
+
+def test_panic_sends_all_notes_off_then_the_note_on_and_off(os_name):
+    m, port = connect_named()
+    assert m.panic(106) is True
+    assert fake_rtmidi.sent == [(port, ALL_OFF), (port, [0x90, 106, 112]), (port, [0x80, 106, 0])]
+
+
+def test_panic_without_a_note_sends_only_all_notes_off():
+    m = connect(MIDIOutput())
+    assert m.panic() is False
+    assert [msg for _, msg in fake_rtmidi.sent] == [ALL_OFF]
+
+
+def test_panic_while_disconnected_sends_nothing():
+    fake_rtmidi.reset('win')
+    m = connect(MIDIOutput())
+    assert m.panic(106) is False
+    assert fake_rtmidi.sent == []
+
+
+def test_panic_keeps_going_when_a_send_fails(caplog):
+    m = connect(MIDIOutput())
+    real = m.midiout.send_message
+    calls = []
+
+    def flaky(message):
+        calls.append(message)
+        if len(calls) == 1:
+            raise fake_rtmidi.RtMidiError('driver hiccup')
+        real(message)
+
+    m.midiout.send_message = flaky
+    assert m.panic(106) is True
+    assert [msg for _, msg in fake_rtmidi.sent] == [[0x90, 106, 112], [0x80, 106, 0]]
+    errors = [r for r in caplog.records if r.levelname == 'ERROR']
+    assert len(errors) == 1 and '[176, 123, 0]' in errors[0].getMessage()
+
+
+def test_panic_returns_false_when_the_note_on_fails():
+    m = connect(MIDIOutput())
+    real = m.midiout.send_message
+
+    def no_note_on(message):
+        if message[0] == 0x90:
+            raise fake_rtmidi.RtMidiError('driver hiccup')
+        real(message)
+
+    m.midiout.send_message = no_note_on
+    assert m.panic(106) is False
+
+
+def test_panic_on_a_port_closed_underneath_does_not_raise(caplog):
+    m = connect_named()[0]
+    m.midiout.close_port()                 # the fake then raises InvalidUseError on every send
+    assert m.panic(106) is False
+    assert any(r.levelname == 'ERROR' for r in caplog.records)
+
+
+def test_panic_from_another_thread():
+    m, port = connect_named()
+    t = threading.Thread(target=m.panic, args=(106,))
+    t.start()
+    t.join()
+    assert fake_rtmidi.sent == [(port, ALL_OFF), (port, [0x90, 106, 112]), (port, [0x80, 106, 0])]
+
+
+def test_a_pending_note_off_still_arrives_after_panic():
+    m = connect(MIDIOutput())
+    m.press_note(64)
+    m.panic(106)
+    wait_for_note_offs()
+    assert [msg for _, msg in fake_rtmidi.sent] == [
+        [0x90, 64, 112], ALL_OFF, [0x90, 106, 112], [0x80, 106, 0], [0x80, 64, 0]]

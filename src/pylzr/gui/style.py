@@ -309,6 +309,17 @@ QMenu {{
 QMenu::item {{ padding: 5px 12px; border-radius: 5px; }}
 QMenu::item:selected {{ background: {tint}; }}
 QMenu::item:disabled {{ color: {t.TEXT_MUTED}; }}
+
+QTabWidget::pane {{ border: none; border-top: 1px solid {t.DIVIDER}; }}
+QTabBar {{ background: transparent; qproperty-drawBase: 0; }}
+QTabBar::tab {{
+    background: transparent; color: {t.TEXT_DIM}; font-size: {t.SIZE_LABEL}px; font-weight: 600;
+    border: none; border-bottom: 2px solid transparent; padding: 4px 12px 6px 12px; margin-right: 4px;
+}}
+QTabBar::tab:hover {{ color: {t.TEXT}; }}
+QTabBar::tab:selected {{ color: {t.TEXT}; border-bottom-color: {t.ACCENT}; }}
+
+QMessageBox QLabel#qt_msgbox_label, QMessageBox QLabel#qt_msgbox_informativelabel {{ min-width: 260px; }}
 {role_rules()}'''
 
 
@@ -340,11 +351,15 @@ QLabel[role="warning"] {{
     border-radius: {t.RADIUS}px; padding: 5px 10px; font-size: {t.SIZE_LABEL}px;
 }}
 QLabel[role="detail"]  {{ color: {t.TEXT}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
+QLabel[role="readout"][state="ignored"] {{ color: {t.WARN}; }}
+QComboBox[state="ignored"] {{ border-color: {t.WARN}; color: {t.WARN}; }}
+QLabel[role="problem"] {{ color: {t.WARN}; font-size: {t.SIZE_LABEL}px; background: transparent; }}
 QLabel[role="readout"] {{
     color: {t.TEXT}; font-family: "{t.MONO_FONT}"; font-size: {t.SIZE_LABEL}px; background: transparent;
 }}
 
 QLineEdit[role="input"], QSpinBox[role="input"] {{ padding: 2px 5px; font-size: {t.SIZE_LABEL}px; }}
+QLineEdit[role="input"][kind="text"] {{ font-family: "{t.UI_FONT}"; }}
 
 QPushButton[role="small-button"] {{ font-size: {t.SIZE_LABEL}px; padding: 3px 10px; }}
 QPushButton[role="small-button"][shape="icon"] {{ padding: 0; }}
@@ -358,6 +373,8 @@ QWidget[role="popover"] {{
     border-radius: {t.RADIUS_CARD}px;
 }}
 QFrame[role="divider"] {{ background: {t.DIVIDER}; border: none; }}
+QScrollArea[role="plain-scroll"] {{ background: transparent; border: none; }}
+QScrollArea[role="plain-scroll"] > QWidget > QWidget {{ background: transparent; }}
 
 QProgressBar[role="meter"] {{
     background: {t.RAISED}; border: 1px solid {t.BORDER_STRONG}; border-radius: 4px; text-align: center;

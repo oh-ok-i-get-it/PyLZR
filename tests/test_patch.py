@@ -138,6 +138,19 @@ def test_next_free_address(entries, footprint, expected):
     assert patch(*entries).next_free_address(footprint, FOOTPRINTS) == expected
 
 
+@pytest.mark.parametrize('names, expected', [
+    ([], 'Laser 1'),
+    (['Laser 1'], 'Laser 2'),
+    (['Laser 2'], 'Laser 1'),                                               # the lowest free number
+    (['Laser 1', 'Laser 2', 'Laser 4'], 'Laser 3'),
+    (['laser 1'], 'Laser 2'),                                               # ignoring case
+    (['Laser L', 'Laser R'], 'Laser 1'),
+])
+def test_next_name(names, expected):
+    assert patch(*((name, GRUOLIN, 1 + 36 * i) for i, name in enumerate(names))).next_name() == expected
+    assert Patch().next_name('Beam') == 'Beam 1'
+
+
 # ── Rendering through a rig ──────────────────────────────────────────────
 
 def rig(p=None):
@@ -168,3 +181,8 @@ def test_a_fixture_with_a_problem_is_kept_listed_but_not_rendered():
     with pytest.raises(KeyError, match='no fixture called "Nope"'):
         r.render({'Nope': {}})
     assert r.renderer('a') is renderer()
+
+
+def test_render_fixture_passes_raw_patterns_through():
+    start, result = rig().render_fixture('laser r', {}, {'b': {'Pattern Group': 16, 'Pattern Selection': 2}})
+    assert start == 37 and result.values[19:21] == bytes([16, 2])
